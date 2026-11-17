@@ -1,5 +1,9 @@
 package dev.corbyoliver.weather.domain
 
+import java.time.Duration
+import java.time.Instant
+import kotlin.math.roundToInt
+
 /** The frog's six looks, in priority order (first match wins). */
 enum class FrogState { RAIN, WINDY, COLD_SNAP, CLEAR_NIGHT, CLEAR_DAY, CLOUDY }
 
@@ -41,4 +45,45 @@ fun selectFrogState(inputs: FrogInputs, t: FrogThresholds = FrogThresholds()): F
         if (inputs.isDay && cloud < t.clearDayMaxCloudPct) return FrogState.CLEAR_DAY
     }
     return FrogState.CLOUDY
+}
+
+/** Highest hourly rain chance for any forecast hour that overlaps [now, now + 1h). */
+fun nextHourRainChance(hours: List<Hour>, now: Instant): Int? {
+    // A "prevHour" value at t covers [t - 1h, t). It overlaps [now, now + 1h)
+    // when now < t < now + 2h.
+    val end = now.plus(Duration.ofHours(2))
+    return hours.filter { it.time.isAfter(now) && it.time.isBefore(end) }
+        .mapNotNull { it.precipChancePrevHourPct }
+        .maxOrNull()
+}
+
+/**
+ * Rain chance for the next hour from every source the app has, taking the
+ * highest: the hourly forecast, Pirate Weather's minute probabilities, and
+ * minute data that shows rain but has no probability (Open-Meteo's
+ * 15-minute amounts), which counts as 100%.
+ */
+fun nextHourRainChanceAll(hours: List<Hour>, nowcast: Nowcast?, now: Instant, wetInPerHr: Double = RainTimingConfig().wetInPerHr): Int? {
+    val hourly = nextHourRainChance(hours, now)
+    val minutes = nowcast?.minutes.orEmpty()
+    val fromProbability = minutes.mapNotNull { it.probability }.maxOrNull()?.let { (it * 100).roundToInt() }
+    val wetWithoutProbability = minutes.any { it.probability == null && (it.intensityInPerHr ?: 0.0) >= wetInPerHr }
+    val fromMinutes = if (wetWithoutProbability) 100 else fromProbability
+    return listOfNotNull(hourly, fromMinutes).maxOrNull()
+}
+
+/** The frog's inputs from real data. A missing current gust falls back to the coming hour's gusts. */
+fun frogInputsFor(forecast: Forecast, nowcast: Nowcast?, now: Instant): FrogInputs {
+    val c = forecast.current
+    val nextHourGust = forecast.hours
+        .filter { it.time.isAfter(now) && it.time.isBefore(now.plus(Duration.ofHours(2))) }
+        .mapNotNull { it.gustPrevHourMph }
+        .maxOrNull()
+    return FrogInputs(
+        nextHourRainChancePct = nextHourRainChanceAll(forecast.hours, nowcast, now),
+        gustMph = c.gustMph ?: nextHourGust,
+        temperatureF = c.temperatureF,
+        isDay = c.isDay,
+        cloudCoverPct = c.cloudCoverPct,
+    )
 }

@@ -2,6 +2,7 @@ package dev.corbyoliver.weather.ui.home
 
 import dev.corbyoliver.weather.domain.FrogState
 import dev.corbyoliver.weather.domain.Hour
+import dev.corbyoliver.weather.domain.nextHourRainChance
 import dev.corbyoliver.weather.domain.Condition
 import dev.corbyoliver.weather.sample.SampleData
 import dev.corbyoliver.weather.sample.SampleScenario

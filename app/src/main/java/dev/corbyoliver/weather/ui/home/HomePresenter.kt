@@ -1,10 +1,11 @@
 package dev.corbyoliver.weather.ui.home
 
 import dev.corbyoliver.weather.domain.Forecast
-import dev.corbyoliver.weather.domain.FrogInputs
 import dev.corbyoliver.weather.domain.FrogThresholds
 import dev.corbyoliver.weather.domain.HomeLocation
 import dev.corbyoliver.weather.domain.Hour
+import dev.corbyoliver.weather.domain.Nowcast
+import dev.corbyoliver.weather.domain.frogInputsFor
 import dev.corbyoliver.weather.domain.selectFrogState
 import java.time.Duration
 import java.time.Instant
@@ -22,6 +23,8 @@ data class HomeInputs(
     val zone: ZoneId = HomeLocation.ZONE,
     val rainLine: String? = null,
     val rainStrip: List<Float?> = emptyList(),
+    /** Minute-by-minute rain for the next hour, if any; the frog uses it too. */
+    val nowcast: Nowcast? = null,
     val alert: AlertBannerUi? = null,
     val alertsNote: String? = null,
     val message: String? = null,
@@ -29,16 +32,6 @@ data class HomeInputs(
 
 /** A forecast older than this is marked out of date on screen. */
 val STALE_AFTER: Duration = Duration.ofMinutes(90)
-
-/** Highest rain chance for any forecast hour that overlaps [now, now + 1h). */
-fun nextHourRainChance(hours: List<Hour>, now: Instant): Int? {
-    // A "prevHour" value at t covers [t - 1h, t). It overlaps [now, now + 1h)
-    // when now < t < now + 2h.
-    val end = now.plus(Duration.ofHours(2))
-    return hours.filter { it.time.isAfter(now) && it.time.isBefore(end) }
-        .mapNotNull { it.precipChancePrevHourPct }
-        .maxOrNull()
-}
 
 fun presentHome(input: HomeInputs, thresholds: FrogThresholds = FrogThresholds()): HomeUiState {
     val f = input.forecast ?: return HomeUiState(
@@ -51,16 +44,7 @@ fun presentHome(input: HomeInputs, thresholds: FrogThresholds = FrogThresholds()
     val today = now.atZone(zone).toLocalDate()
     val c = f.current
 
-    val frog = selectFrogState(
-        FrogInputs(
-            nextHourRainChancePct = nextHourRainChance(f.hours, now),
-            gustMph = c.gustMph,
-            temperatureF = c.temperatureF,
-            isDay = c.isDay,
-            cloudCoverPct = c.cloudCoverPct,
-        ),
-        thresholds,
-    )
+    val frog = selectFrogState(frogInputsFor(f, input.nowcast, now), thresholds)
 
     val upcoming = f.hours.filter { it.time.isAfter(now) }.take(5)
     val hourCells = listOf(HourCellUi("Now", Format.temp(c.temperatureF), c.condition, c.isDay)) +

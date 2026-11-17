@@ -76,6 +76,7 @@ internal fun renderLive(snap: WeatherSnapshot, selectedDay: Int, now: Instant): 
             selectedDay = selectedDay,
             rainLine = rain.line,
             rainStrip = rain.strip,
+            nowcast = rain.nowcast,
             alert = alerts.banner,
             alertsNote = alerts.note,
             message = liveMessage(snap),
