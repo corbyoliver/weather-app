@@ -1,15 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Our frog's face (original character), centred in the 72dp safe zone. -->
+<!-- App icon: our frog (original character) sitting inside a raindrop. Kept inside the 66dp safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#7BCB6A" android:pathData="M24,62a30,20 0,1 0,60 0a30,20 0,1 0,-60 0z" />
-    <path android:fillColor="#7BCB6A" android:pathData="M30,46a11,11 0,1 0,22 0a11,11 0,1 0,-22 0z" />
-    <path android:fillColor="#7BCB6A" android:pathData="M56,46a11,11 0,1 0,22 0a11,11 0,1 0,-22 0z" />
-    <path android:fillColor="#1E2A1C" android:pathData="M34.5,46a6.5,6.5 0,1 0,13 0a6.5,6.5 0,1 0,-13 0z" />
-    <path android:fillColor="#1E2A1C" android:pathData="M60.5,46a6.5,6.5 0,1 0,13 0a6.5,6.5 0,1 0,-13 0z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M37,44a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M63,44a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z" />
-    <path android:strokeColor="#3E7F3A" android:strokeWidth="2.4" android:strokeLineCap="round"
-        android:pathData="M42,66q12,8 24,0" />
+    <!-- Raindrop -->
+    <path android:fillColor="#8AB4F8"
+        android:pathData="M54,22C54,22 32,48 32,64A22,22 0,0 0,76 64C76,48 54,22 54,22z" />
+    <!-- Shine -->
+    <path android:fillColor="#73FFFFFF"
+        android:pathData="M44.5,38a2.4,5.5 25,1 0,0.01 0z" />
+    <!-- Body and belly -->
+    <path android:fillColor="#7BCB6A" android:pathData="M39,71a15,10 0,1 0,30 0a15,10 0,1 0,-30 0z" />
+    <path android:fillColor="#C9EBB8" android:pathData="M45.5,74a8.5,5.5 0,1 0,17 0a8.5,5.5 0,1 0,-17 0z" />
+    <!-- Eyes -->
+    <path android:fillColor="#7BCB6A" android:pathData="M40.5,60a5.5,5.5 0,1 0,11 0a5.5,5.5 0,1 0,-11 0z" />
+    <path android:fillColor="#7BCB6A" android:pathData="M56.5,60a5.5,5.5 0,1 0,11 0a5.5,5.5 0,1 0,-11 0z" />
+    <path android:fillColor="#1E2A1C" android:pathData="M43,60a3,3 0,1 0,6 0a3,3 0,1 0,-6 0z" />
+    <path android:fillColor="#1E2A1C" android:pathData="M59,60a3,3 0,1 0,6 0a3,3 0,1 0,-6 0z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M45.2,58.8a1,1 0,1 0,2 0a1,1 0,1 0,-2 0z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M61.2,58.8a1,1 0,1 0,2 0a1,1 0,1 0,-2 0z" />
+    <!-- Smile -->
+    <path android:strokeColor="#3E7F3A" android:strokeWidth="1.6" android:strokeLineCap="round"
+        android:pathData="M49.5,68q4.5,3 9,0" />
 </vector>
