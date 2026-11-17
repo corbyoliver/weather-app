@@ -49,7 +49,7 @@ fun presentHome(input: HomeInputs, thresholds: FrogThresholds = FrogThresholds()
 
     val upcoming = f.hours.filter { it.time.isAfter(now) }.take(5)
     val hourCells = listOf(HourCellUi("Now", Format.temp(c.temperatureF), c.condition, c.isDay)) +
-        upcoming.map { HourCellUi(Format.hour(it.time, zone), Format.temp(it.temperatureF), it.condition, it.isDay) }
+        upcoming.map { HourCellUi(Format.hour(it.time, zone), Format.temp(it.temperatureF), it.condition, it.isDay, Format.shortHour(it.time, zone)) }
 
     val hero = HeroUi(
         place = HomeLocation.NAME,

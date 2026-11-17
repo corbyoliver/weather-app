@@ -15,10 +15,14 @@ class HomeLiveRenderTest {
     private val forecast = OpenMeteoMapper.map(FORECAST_FIXTURE, AIR_QUALITY_FIXTURE, FIXTURE_FETCHED_AT)
 
     @Test fun `messages for each repository state`() {
-        assertEquals("Loading forecast…", liveMessage(WeatherSnapshot()))
-        assertEquals("Could not load the forecast. Boom.", liveMessage(WeatherSnapshot(lastError = "Boom.")))
-        assertNull(liveMessage(WeatherSnapshot(forecast = forecast)))
-        assertEquals("Could not update. Boom.", liveMessage(WeatherSnapshot(forecast = forecast, lastError = "Boom.")))
+        val now = FIXTURE_FETCHED_AT.plus(Duration.ofMinutes(40))
+        assertEquals("Loading forecast…", liveMessage(WeatherSnapshot(), now))
+        assertEquals("Could not load the forecast. No internet connection.", liveMessage(WeatherSnapshot(lastError = "No internet connection."), now))
+        assertNull(liveMessage(WeatherSnapshot(forecast = forecast), now))
+        assertEquals(
+            "Could not update. No internet connection. Showing the forecast from 10:30 AM.",
+            liveMessage(WeatherSnapshot(forecast = forecast, lastError = "No internet connection."), now),
+        )
     }
 
     @Test fun `live data from the captured response fills the home screen`() {

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.corbyoliver.weather.data.WeatherRepository
 import dev.corbyoliver.weather.data.WeatherSnapshot
+import dev.corbyoliver.weather.domain.HomeLocation
 import dev.corbyoliver.weather.sample.SampleData
 import dev.corbyoliver.weather.sample.SampleScenario
 import kotlinx.coroutines.Dispatchers
@@ -81,17 +82,17 @@ internal fun renderLive(snap: WeatherSnapshot, selectedDate: LocalDate?, now: In
             nowcast = rain.nowcast,
             alert = alerts.banner,
             alertsNote = alerts.note,
-            message = liveMessage(snap),
+            message = liveMessage(snap, now),
         ),
     )
 }
 
-internal fun liveMessage(snap: WeatherSnapshot): String? {
+internal fun liveMessage(snap: WeatherSnapshot, now: Instant): String? {
     val error = snap.lastError
     return when {
         snap.forecast == null && error != null -> "Could not load the forecast. $error"
         snap.forecast == null -> "Loading forecast…"
-        error != null -> "Could not update. $error"
+        error != null -> "Could not update. $error Showing the forecast from ${Format.updated(snap.forecast.fetchedAt, now, HomeLocation.ZONE).removePrefix("Updated ")}."
         else -> null
     }
 }

@@ -26,21 +26,47 @@ android {
         minSdk = 36
         targetSdk = 36
         versionCode = 1
-        versionName = "0.1"
+        versionName = "1.0"
 
         buildConfigField("String", "PIRATE_WEATHER_API_KEY", quoted(localProp("pirateWeatherApiKey")))
         buildConfigField("String", "NWS_USER_AGENT", quoted(localProp("nwsUserAgent")))
     }
 
+    // The personal key from scripts/create-signing-key.sh signs every build,
+    // so the phone accepts updates. Without it, Android's default debug key
+    // is used (fine for the emulator, but tied to this Mac).
+    val personalKey = localProp("signingStoreFile").takeIf { it.isNotBlank() && file(it).exists() }
+    signingConfigs {
+        if (personalKey != null) {
+            create("personal") {
+                storeFile = file(personalKey)
+                storePassword = localProp("signingStorePassword")
+                keyAlias = localProp("signingKeyAlias")
+                keyPassword = localProp("signingStorePassword")
+                storeType = "PKCS12"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (personalKey != null) signingConfig = signingConfigs.getByName("personal")
+        }
         release {
             isMinifyEnabled = false
+            if (personalKey != null) signingConfig = signingConfigs.getByName("personal")
         }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // The DM Sans licence (SIL OFL) must travel with the font: package the
+    // repo's licenses/ folder as APK assets.
+    sourceSets {
+        getByName("main").assets.directories.add("../licenses")
     }
 
     buildFeatures {

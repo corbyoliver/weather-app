@@ -64,6 +64,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -193,7 +195,7 @@ fun HeroCard(hero: HeroUi) {
             }
             if (hero.rainStrip.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                RainStrip(hero.rainStrip, Modifier.fillMaxWidth().height(28.dp))
+                RainStrip(hero.rainStrip, Modifier.fillMaxWidth())
             }
             Spacer(Modifier.height(16.dp))
             Row(Modifier.fillMaxWidth()) {
@@ -208,7 +210,10 @@ fun HeroCard(hero: HeroUi) {
                         Spacer(Modifier.height(4.dp))
                         WeatherIcon(h.condition, h.isDay, Modifier.size(28.dp))
                         Spacer(Modifier.height(4.dp))
-                        Text(h.label, style = MaterialTheme.typography.labelSmall, color = Tokens.TextMuted, maxLines = 1)
+                        Text(
+                            if (largeText()) h.shortLabel else h.label,
+                            style = MaterialTheme.typography.labelSmall, color = Tokens.TextMuted, maxLines = 1, softWrap = false,
+                        )
                     }
                 }
             }
@@ -248,7 +253,8 @@ fun WeatherIcon(condition: Condition, isDay: Boolean, modifier: Modifier = Modif
 @Composable
 fun RainStrip(values: List<Float?>, modifier: Modifier = Modifier) {
     Column(modifier.clearAndSetSemantics { }) {
-        Canvas(Modifier.fillMaxWidth().weight(1f)) {
+        // Bars keep a fixed height; the labels below grow with the text size.
+        Canvas(Modifier.fillMaxWidth().height(14.dp)) {
             val n = values.size
             if (n == 0) return@Canvas
             val gap = 2.dp.toPx()
@@ -281,7 +287,7 @@ fun DayChips(days: List<DayChipUi>, selected: Int, onSelect: (Int) -> Unit) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
-                    .width(76.dp)
+                    .widthIn(min = 76.dp)
                     .clip(RoundedCornerShape(22.dp))
                     .background(if (isSel) Tokens.Tile else Tokens.Card)
                     .then(if (isSel) Modifier.border(BorderStroke(1.5.dp, Tokens.Text.copy(alpha = 0.85f)), RoundedCornerShape(22.dp)) else Modifier)
@@ -290,16 +296,16 @@ fun DayChips(days: List<DayChipUi>, selected: Int, onSelect: (Int) -> Unit) {
                         contentDescription = d.description
                         stateDescription = if (isSel) "Selected" else "Not selected"
                     }
-                    .padding(vertical = 12.dp),
+                    .padding(vertical = 12.dp, horizontal = 10.dp),
             ) {
                 Text(d.label, style = MaterialTheme.typography.labelMedium, color = if (isSel) Tokens.Text else Tokens.TextMuted)
                 Spacer(Modifier.height(6.dp))
                 WeatherIcon(d.condition, true, Modifier.size(30.dp))
                 Spacer(Modifier.height(6.dp))
                 Row {
-                    Text(d.high, style = MaterialTheme.typography.labelLarge)
+                    Text(d.high, style = MaterialTheme.typography.labelLarge, softWrap = false)
                     Spacer(Modifier.width(6.dp))
-                    Text(d.low, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.W400), color = Tokens.TextMuted)
+                    Text(d.low, style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.W400), color = Tokens.TextMuted, softWrap = false)
                 }
             }
         }
@@ -347,8 +353,16 @@ private fun DetailRow(icon: RowIcon, title: String, value: String, expanded: Boo
             Canvas(Modifier.size(22.dp)) { drawRowIcon(icon) }
         }
         Spacer(Modifier.width(14.dp))
-        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = Tokens.TextMuted, textAlign = TextAlign.End, modifier = Modifier.padding(start = 8.dp))
+        if (largeText()) {
+            // Large text: the value goes under the title, so neither breaks mid-word.
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(value, style = MaterialTheme.typography.bodyMedium, color = Tokens.TextMuted)
+            }
+        } else {
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = Tokens.TextMuted, textAlign = TextAlign.End, modifier = Modifier.padding(start = 8.dp))
+        }
         if (expanded != null) {
             Spacer(Modifier.width(8.dp))
             Canvas(Modifier.size(20.dp).rotate(if (expanded) 180f else 0f)) { drawChevron(Tokens.TextMuted) }
@@ -494,3 +508,7 @@ private fun DrawScope.drawRowIcon(icon: RowIcon) {
         }
     }
 }
+
+/** True when the user has chosen a large text size (over 130%) in Android settings. */
+@Composable
+private fun largeText(): Boolean = LocalDensity.current.fontScale > 1.3f

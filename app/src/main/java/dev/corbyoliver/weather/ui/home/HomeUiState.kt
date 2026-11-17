@@ -37,7 +37,14 @@ data class HeroUi(
     val rainStrip: List<Float?> = emptyList(),
 )
 
-data class HourCellUi(val label: String, val temperature: String, val condition: Condition, val isDay: Boolean)
+data class HourCellUi(
+    val label: String,
+    val temperature: String,
+    val condition: Condition,
+    val isDay: Boolean,
+    /** "4p": used when the user's text size is large, so six columns still fit. */
+    val shortLabel: String = label,
+)
 
 data class DayChipUi(
     val date: java.time.LocalDate,
