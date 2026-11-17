@@ -59,6 +59,12 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,6 +76,7 @@ import dev.corbyoliver.weather.ui.draw.drawWeatherIcon
 import dev.corbyoliver.weather.ui.draw.drawWindArrow
 import dev.corbyoliver.weather.ui.theme.Tokens
 
+const val OPEN_METEO_URL = "https://open-meteo.com/"
 const val ATTRIBUTION = "Forecast: Open-Meteo (CC BY 4.0) · Rain timing: Pirate Weather · Alerts: National Weather Service"
 
 @Composable
@@ -417,7 +424,15 @@ fun Footer(updated: UpdatedUi?) {
             )
             Spacer(Modifier.height(6.dp))
         }
-        Text(ATTRIBUTION, style = MaterialTheme.typography.labelSmall, color = Tokens.TextMuted)
+        // Open-Meteo data is CC BY 4.0: the credit links to open-meteo.com.
+        val credit = buildAnnotatedString {
+            append("Forecast: ")
+            withLink(LinkAnnotation.Url(OPEN_METEO_URL, TextLinkStyles(SpanStyle(color = Tokens.Accent, textDecoration = TextDecoration.Underline)))) {
+                append("Open-Meteo")
+            }
+            append(ATTRIBUTION.removePrefix("Forecast: Open-Meteo"))
+        }
+        Text(credit, style = MaterialTheme.typography.labelSmall, color = Tokens.TextMuted)
     }
 }
 
