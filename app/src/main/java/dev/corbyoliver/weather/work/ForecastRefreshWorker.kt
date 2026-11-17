@@ -53,3 +53,31 @@ internal fun workResultFor(result: RefreshResult): ListenableWorker.Result = whe
     RefreshResult.UPDATED, RefreshResult.SKIPPED -> ListenableWorker.Result.success()
     RefreshResult.FAILED -> ListenableWorker.Result.retry()
 }
+
+/**
+ * Checks NWS for active alerts every 15 minutes (the shortest period
+ * WorkManager allows), so the in-app banner stays current. It only updates
+ * the cached alerts. It never posts a notification.
+ */
+class AlertPollWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+        val repository = (applicationContext as WeatherApp).repository
+        return workResultFor(repository.refreshAlerts())
+    }
+
+    companion object {
+        const val UNIQUE_NAME = "alert-poll"
+        val INTERVAL: Duration = Duration.ofMinutes(15)
+        /** First retry after a failed run; no shorter than the repository's wait after an alerts failure. */
+        val RETRY_BACKOFF: Duration = Duration.ofMinutes(2)
+
+        fun schedule(context: Context) {
+            val request = PeriodicWorkRequestBuilder<AlertPollWorker>(INTERVAL)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, RETRY_BACKOFF)
+                .build()
+            WorkManager.getInstance(context)
+                .enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.UPDATE, request)
+        }
+    }
+}

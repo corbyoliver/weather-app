@@ -8,6 +8,7 @@ import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import dev.corbyoliver.weather.data.AppJson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import java.io.File
@@ -25,30 +26,56 @@ data class CachedOpenMeteo(
     val airQualityJson: String? = null,
 )
 
+/** The last good NWS alerts download, kept as the raw JSON. */
+@Serializable
+data class CachedNws(val fetchedAtEpochMs: Long, val alertsJson: String)
+
 /** What is written to disk. An empty file means "nothing cached yet". */
 @Serializable
 data class OpenMeteoCacheFile(val entry: CachedOpenMeteo? = null)
+
+@Serializable
+data class NwsCacheFile(val entry: CachedNws? = null)
 
 interface ForecastCache {
     suspend fun load(): CachedOpenMeteo?
     suspend fun save(value: CachedOpenMeteo)
 }
 
-object OpenMeteoCacheSerializer : Serializer<OpenMeteoCacheFile> {
-    override val defaultValue = OpenMeteoCacheFile()
+interface AlertsCache {
+    suspend fun load(): CachedNws?
+    suspend fun save(value: CachedNws)
+}
 
-    override suspend fun readFrom(input: InputStream): OpenMeteoCacheFile = try {
-        AppJson.decodeFromString(OpenMeteoCacheFile.serializer(), input.readBytes().decodeToString())
+/** Stores one @Serializable value as JSON. A file that cannot be read is reported as corrupt. */
+class JsonFileSerializer<T>(private val serializer: KSerializer<T>, override val defaultValue: T) : Serializer<T> {
+    override suspend fun readFrom(input: InputStream): T = try {
+        AppJson.decodeFromString(serializer, input.readBytes().decodeToString())
     } catch (e: SerializationException) {
-        throw CorruptionException("Cached forecast could not be read.", e)
+        throw CorruptionException("Cached data could not be read.", e)
     } catch (e: IllegalArgumentException) {
-        throw CorruptionException("Cached forecast could not be read.", e)
+        throw CorruptionException("Cached data could not be read.", e)
     }
 
-    override suspend fun writeTo(t: OpenMeteoCacheFile, output: OutputStream) {
-        output.write(AppJson.encodeToString(OpenMeteoCacheFile.serializer(), t).encodeToByteArray())
+    override suspend fun writeTo(t: T, output: OutputStream) {
+        output.write(AppJson.encodeToString(serializer, t).encodeToByteArray())
     }
 }
+
+val OpenMeteoCacheSerializer = JsonFileSerializer(OpenMeteoCacheFile.serializer(), OpenMeteoCacheFile())
+val NwsCacheSerializer = JsonFileSerializer(NwsCacheFile.serializer(), NwsCacheFile())
+
+/**
+ * Only one DataStore may be open per file, so create each once (the
+ * Application does). A corrupt file is replaced with an empty cache.
+ */
+fun <T> jsonDataStore(file: File, serializer: JsonFileSerializer<T>, scope: CoroutineScope): DataStore<T> =
+    DataStoreFactory.create(
+        serializer = serializer,
+        corruptionHandler = ReplaceFileCorruptionHandler { serializer.defaultValue },
+        scope = scope,
+        produceFile = { file },
+    )
 
 class DataStoreForecastCache(private val store: DataStore<OpenMeteoCacheFile>) : ForecastCache {
     override suspend fun load(): CachedOpenMeteo? = store.data.first().entry
@@ -57,17 +84,17 @@ class DataStoreForecastCache(private val store: DataStore<OpenMeteoCacheFile>) :
     }
 
     companion object {
-        /**
-         * Only one DataStore may be open per file, so create this once (the
-         * Application does). A corrupt file is replaced with an empty cache.
-         */
-        fun create(file: File, scope: CoroutineScope): DataStoreForecastCache = DataStoreForecastCache(
-            DataStoreFactory.create(
-                serializer = OpenMeteoCacheSerializer,
-                corruptionHandler = ReplaceFileCorruptionHandler { OpenMeteoCacheSerializer.defaultValue },
-                scope = scope,
-                produceFile = { file },
-            ),
-        )
+        fun create(file: File, scope: CoroutineScope) = DataStoreForecastCache(jsonDataStore(file, OpenMeteoCacheSerializer, scope))
+    }
+}
+
+class DataStoreAlertsCache(private val store: DataStore<NwsCacheFile>) : AlertsCache {
+    override suspend fun load(): CachedNws? = store.data.first().entry
+    override suspend fun save(value: CachedNws) {
+        store.updateData { NwsCacheFile(value) }
+    }
+
+    companion object {
+        fun create(file: File, scope: CoroutineScope) = DataStoreAlertsCache(jsonDataStore(file, NwsCacheSerializer, scope))
     }
 }

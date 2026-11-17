@@ -26,9 +26,6 @@ sealed interface HomeSource {
     data class Sample(val scenario: SampleScenario) : HomeSource
 }
 
-/** Until NWS alerts are built (step 4), the app cannot know about alerts. Never claim "No alerts". */
-const val ALERTS_NOT_CHECKED = "Alerts unavailable"
-
 class HomeViewModel(private val source: HomeSource) : ViewModel() {
     private val selectedDay = MutableStateFlow(0)
 
@@ -63,19 +60,24 @@ class HomeViewModel(private val source: HomeSource) : ViewModel() {
     fun onForeground() {
         if (source is HomeSource.Live) {
             viewModelScope.launch(Dispatchers.IO) { source.repository.refresh() }
+            viewModelScope.launch(Dispatchers.IO) { source.repository.refreshAlerts() }
         }
     }
 }
 
-internal fun renderLive(snap: WeatherSnapshot, selectedDay: Int, now: Instant): HomeUiState = presentHome(
-    HomeInputs(
-        forecast = snap.forecast,
-        now = now,
-        selectedDay = selectedDay,
-        alertsNote = ALERTS_NOT_CHECKED,
-        message = liveMessage(snap),
-    ),
-)
+internal fun renderLive(snap: WeatherSnapshot, selectedDay: Int, now: Instant): HomeUiState {
+    val alerts = presentAlerts(snap.alerts, now)
+    return presentHome(
+        HomeInputs(
+            forecast = snap.forecast,
+            now = now,
+            selectedDay = selectedDay,
+            alert = alerts.banner,
+            alertsNote = alerts.note,
+            message = liveMessage(snap),
+        ),
+    )
+}
 
 internal fun liveMessage(snap: WeatherSnapshot): String? {
     val error = snap.lastError

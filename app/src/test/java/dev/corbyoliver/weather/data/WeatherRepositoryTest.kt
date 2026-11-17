@@ -1,7 +1,12 @@
 package dev.corbyoliver.weather.data
 
+import dev.corbyoliver.weather.data.cache.AlertsCache
+import dev.corbyoliver.weather.data.cache.CachedNws
 import dev.corbyoliver.weather.data.cache.CachedOpenMeteo
 import dev.corbyoliver.weather.data.cache.ForecastCache
+import dev.corbyoliver.weather.data.nws.NWS_OREGON_FIXTURE
+import dev.corbyoliver.weather.data.nws.NWS_POINT_EMPTY_FIXTURE
+import dev.corbyoliver.weather.data.nws.NwsSource
 import dev.corbyoliver.weather.data.openmeteo.AIR_QUALITY_FIXTURE
 import dev.corbyoliver.weather.data.openmeteo.FIXTURE_FETCHED_AT
 import dev.corbyoliver.weather.data.openmeteo.FORECAST_FIXTURE
@@ -31,11 +36,25 @@ private class FakeCache(var entry: CachedOpenMeteo? = null) : ForecastCache {
     override suspend fun save(value: CachedOpenMeteo) { saves++; entry = value }
 }
 
+private class FakeNws : NwsSource {
+    var body: () -> String = { NWS_OREGON_FIXTURE }
+    var calls = 0
+    override suspend fun activeAlertsJson(): String { calls++; return body() }
+}
+
+private class FakeAlertsCache(var entry: CachedNws? = null) : AlertsCache {
+    var saves = 0
+    override suspend fun load(): CachedNws? = entry
+    override suspend fun save(value: CachedNws) { saves++; entry = value }
+}
+
 class WeatherRepositoryTest {
     private var now: Instant = FIXTURE_FETCHED_AT
     private val source = FakeSource()
     private val cache = FakeCache()
-    private fun repo() = WeatherRepository(source, cache, clock = { now }, log = { _, _ -> })
+    private val nws = FakeNws()
+    private val alertsCache = FakeAlertsCache()
+    private fun repo() = WeatherRepository(source, cache, nws, alertsCache, clock = { now }, log = { _, _ -> })
     private fun offline() { source.forecast = { throw SourceException("Open-Meteo could not be reached (UnknownHostException).") } }
     private fun cachedEntry(at: Instant) = CachedOpenMeteo(at.toEpochMilli(), FORECAST_FIXTURE, AIR_QUALITY_FIXTURE)
 
@@ -149,5 +168,83 @@ class WeatherRepositoryTest {
         val shown = r.state.value.forecast
         r.loadCache()
         assertSame(shown, r.state.value.forecast)
+    }
+
+    // ---- NWS alerts ----
+
+    @Test fun `alerts are unknown, not empty, before any check`() = runBlocking {
+        val r = repo()
+        r.loadCache()
+        assertNull(r.state.value.alerts.alerts)
+    }
+
+    @Test fun `a successful alerts check shows and saves the alerts`() = runBlocking {
+        val r = repo()
+        assertEquals(RefreshResult.UPDATED, r.refreshAlerts())
+        val a = r.state.value.alerts
+        assertEquals(listOf("Winter Weather Advisory", "Wind Advisory"), a.alerts?.map { it.event })
+        assertEquals(now, a.checkedAt)
+        assertNull(a.lastError)
+        assertEquals(NWS_OREGON_FIXTURE, alertsCache.entry?.alertsJson)
+    }
+
+    @Test fun `an empty alert list is a real answer`() = runBlocking {
+        nws.body = { NWS_POINT_EMPTY_FIXTURE }
+        val r = repo()
+        r.refreshAlerts()
+        assertEquals(emptyList<Any>(), r.state.value.alerts.alerts)
+    }
+
+    @Test fun `a failed alerts check keeps known alerts and reports the error`() = runBlocking {
+        val r = repo()
+        r.refreshAlerts()
+        nws.body = { throw SourceException("National Weather Service error (HTTP 503).") }
+        now = now.plus(Duration.ofMinutes(20))
+        assertEquals(RefreshResult.FAILED, r.refreshAlerts())
+        val a = r.state.value.alerts
+        assertEquals(2, a.alerts?.size)
+        assertEquals("National Weather Service error (HTTP 503).", a.lastError)
+        assertEquals(1, alertsCache.saves)
+    }
+
+    @Test fun `an unreadable alerts body never becomes no alerts`() = runBlocking {
+        nws.body = { "<html>Service unavailable</html>" }
+        val r = repo()
+        assertEquals(RefreshResult.FAILED, r.refreshAlerts())
+        assertNull(r.state.value.alerts.alerts)
+        assertNotNull(r.state.value.alerts.lastError)
+        assertEquals(0, alertsCache.saves)
+    }
+
+    @Test fun `alert checks wait 5 minutes after a success and 2 after a failure`() = runBlocking {
+        val r = repo()
+        r.refreshAlerts()
+        now = now.plus(Duration.ofMinutes(4))
+        assertEquals(RefreshResult.SKIPPED, r.refreshAlerts())
+        now = now.plus(Duration.ofMinutes(1))
+        nws.body = { throw SourceException("down") }
+        assertEquals(RefreshResult.FAILED, r.refreshAlerts())
+        now = now.plus(Duration.ofSeconds(119))
+        assertEquals(RefreshResult.SKIPPED, r.refreshAlerts())
+        now = now.plus(Duration.ofSeconds(1))
+        assertEquals(RefreshResult.FAILED, r.refreshAlerts())
+        assertEquals(3, nws.calls)
+    }
+
+    @Test fun `cached alerts load with their check time`() = runBlocking {
+        val at = now.minus(Duration.ofMinutes(30))
+        alertsCache.entry = CachedNws(at.toEpochMilli(), NWS_OREGON_FIXTURE)
+        val r = repo()
+        r.loadCache()
+        assertEquals(at, r.state.value.alerts.checkedAt)
+        assertEquals(2, r.state.value.alerts.alerts?.size)
+        assertEquals(0, nws.calls)
+    }
+
+    @Test fun `a forecast refresh does not wipe the alerts`() = runBlocking {
+        val r = repo()
+        r.refreshAlerts()
+        r.refresh(force = true)
+        assertEquals(2, r.state.value.alerts.alerts?.size)
     }
 }

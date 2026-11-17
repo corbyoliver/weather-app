@@ -1,10 +1,15 @@
 package dev.corbyoliver.weather.data
 
 import android.util.Log
+import dev.corbyoliver.weather.data.cache.AlertsCache
+import dev.corbyoliver.weather.data.cache.CachedNws
 import dev.corbyoliver.weather.data.cache.CachedOpenMeteo
 import dev.corbyoliver.weather.data.cache.ForecastCache
+import dev.corbyoliver.weather.data.nws.NwsMapper
+import dev.corbyoliver.weather.data.nws.NwsSource
 import dev.corbyoliver.weather.data.openmeteo.OpenMeteoMapper
 import dev.corbyoliver.weather.data.openmeteo.OpenMeteoSource
+import dev.corbyoliver.weather.domain.Alert
 import dev.corbyoliver.weather.domain.Forecast
 import dev.corbyoliver.weather.domain.HomeLocation
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,26 +23,44 @@ import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 
+/**
+ * NWS alerts as last known.
+ *
+ * [alerts] is null until one check has succeeded (from the network or the
+ * cache): "not known" is never shown as "no alerts".
+ */
+data class AlertsSnapshot(
+    val alerts: List<Alert>? = null,
+    /** When [alerts] was downloaded. */
+    val checkedAt: Instant? = null,
+    /** Set when the most recent check failed. Safe to show on screen. */
+    val lastError: String? = null,
+)
+
 /** What the screens see. [forecast] is the last good data, even after a failed refresh. */
 data class WeatherSnapshot(
     val forecast: Forecast? = null,
-    /** Set when the most recent refresh failed. Safe to show on screen. */
+    /** Set when the most recent forecast refresh failed. Safe to show on screen. */
     val lastError: String? = null,
     val refreshing: Boolean = false,
+    val alerts: AlertsSnapshot = AlertsSnapshot(),
 )
 
 enum class RefreshResult { UPDATED, SKIPPED, FAILED }
 
 /**
- * The one place screens get weather from. Today it has one source
- * (Open-Meteo); Pirate Weather and NWS join it in later steps.
+ * The one place screens get weather from: Open-Meteo for the forecast, NWS
+ * for alerts (Pirate Weather joins in a later step).
  *
- * The last good download is cached on disk, so the app opens with data even
- * when offline. A failed download never replaces good cached data.
+ * The last good download from each source is cached on disk, so the app
+ * opens with data even when offline. A failed download never replaces good
+ * cached data.
  */
 class WeatherRepository(
     private val openMeteo: OpenMeteoSource,
     private val cache: ForecastCache,
+    private val nws: NwsSource,
+    private val alertsCache: AlertsCache,
     private val clock: () -> Instant = Instant::now,
     private val zone: ZoneId = HomeLocation.ZONE,
     private val log: (String, Throwable?) -> Unit = { msg, e -> Log.w(TAG, msg, e) },
@@ -45,21 +68,28 @@ class WeatherRepository(
     private val _state = MutableStateFlow(WeatherSnapshot())
     val state: StateFlow<WeatherSnapshot> = _state.asStateFlow()
 
-    private val mutex = Mutex()
-    private var cacheLoaded = false
+    private val forecastMutex = Mutex()
+    private var forecastCacheLoaded = false
     private var cached: CachedOpenMeteo? = null
     private var lastFailureAt: Instant? = null
 
-    /** Shows the cached forecast, if any. Safe to call more than once. */
-    suspend fun loadCache() = mutex.withLock { loadCacheLocked() }
+    private val alertsMutex = Mutex()
+    private var alertsCacheLoaded = false
+    private var lastAlertsFailureAt: Instant? = null
+
+    /** Shows the cached forecast and alerts, if any. Safe to call more than once. */
+    suspend fun loadCache() {
+        forecastMutex.withLock { loadForecastCacheLocked() }
+        alertsMutex.withLock { loadAlertsCacheLocked() }
+    }
 
     /**
      * Downloads a new forecast unless one was fetched less than
      * [MIN_AFTER_SUCCESS] ago, or the last try failed less than
      * [MIN_AFTER_FAILURE] ago. [force] skips both waits.
      */
-    suspend fun refresh(force: Boolean = false): RefreshResult = mutex.withLock {
-        loadCacheLocked()
+    suspend fun refresh(force: Boolean = false): RefreshResult = forecastMutex.withLock {
+        loadForecastCacheLocked()
         val now = clock()
         if (!force) {
             val lastSuccess = _state.value.forecast?.fetchedAt
@@ -88,7 +118,7 @@ class WeatherRepository(
             }
             cached = entry
             lastFailureAt = null
-            _state.value = WeatherSnapshot(forecast = forecast)
+            _state.update { it.copy(forecast = forecast, lastError = null, refreshing = false) }
             return RefreshResult.UPDATED
         } catch (e: SourceException) {
             log("Forecast refresh failed", e)
@@ -98,9 +128,42 @@ class WeatherRepository(
         }
     }
 
-    private suspend fun loadCacheLocked() {
-        if (cacheLoaded) return
-        cacheLoaded = true
+    /**
+     * Checks NWS for active alerts unless the last check succeeded less than
+     * [ALERTS_MIN_AFTER_SUCCESS] ago or failed less than
+     * [ALERTS_MIN_AFTER_FAILURE] ago. [force] skips both waits.
+     */
+    suspend fun refreshAlerts(force: Boolean = false): RefreshResult = alertsMutex.withLock {
+        loadAlertsCacheLocked()
+        val now = clock()
+        if (!force) {
+            val lastSuccess = _state.value.alerts.checkedAt
+            if (lastSuccess != null && isWithin(lastSuccess, now, ALERTS_MIN_AFTER_SUCCESS)) return RefreshResult.SKIPPED
+            val lastFailure = lastAlertsFailureAt
+            if (lastFailure != null && isWithin(lastFailure, now, ALERTS_MIN_AFTER_FAILURE)) return RefreshResult.SKIPPED
+        }
+        try {
+            val json = nws.activeAlertsJson()
+            val alerts = NwsMapper.map(json) // throws before saving if unreadable
+            try {
+                alertsCache.save(CachedNws(now.toEpochMilli(), json))
+            } catch (e: IOException) {
+                log("Could not save the alerts cache", e)
+            }
+            lastAlertsFailureAt = null
+            _state.update { it.copy(alerts = AlertsSnapshot(alerts = alerts, checkedAt = now)) }
+            return RefreshResult.UPDATED
+        } catch (e: SourceException) {
+            log("Alerts check failed", e)
+            lastAlertsFailureAt = now
+            _state.update { it.copy(alerts = it.alerts.copy(lastError = e.message)) }
+            return RefreshResult.FAILED
+        }
+    }
+
+    private suspend fun loadForecastCacheLocked() {
+        if (forecastCacheLoaded) return
+        forecastCacheLoaded = true
         val entry = try {
             cache.load()
         } catch (e: IOException) {
@@ -118,6 +181,25 @@ class WeatherRepository(
         _state.update { if (it.forecast == null) it.copy(forecast = forecast) else it }
     }
 
+    private suspend fun loadAlertsCacheLocked() {
+        if (alertsCacheLoaded) return
+        alertsCacheLoaded = true
+        val entry = try {
+            alertsCache.load()
+        } catch (e: IOException) {
+            log("Could not read the alerts cache", e)
+            null
+        } ?: return
+        val alerts = try {
+            NwsMapper.map(entry.alertsJson)
+        } catch (e: SourceException) {
+            log("Cached alerts could not be read; ignoring them", e)
+            return
+        }
+        val checkedAt = Instant.ofEpochMilli(entry.fetchedAtEpochMs)
+        _state.update { if (it.alerts.checkedAt == null) it.copy(alerts = it.alerts.copy(alerts = alerts, checkedAt = checkedAt)) else it }
+    }
+
     /** True if [then] is less than [window] before [now]. A time in the future (clock changed) never counts. */
     private fun isWithin(then: Instant, now: Instant, window: Duration): Boolean {
         val age = Duration.between(then, now)
@@ -128,5 +210,7 @@ class WeatherRepository(
         private const val TAG = "WeatherRepository"
         val MIN_AFTER_SUCCESS: Duration = Duration.ofMinutes(10)
         val MIN_AFTER_FAILURE: Duration = Duration.ofMinutes(5)
+        val ALERTS_MIN_AFTER_SUCCESS: Duration = Duration.ofMinutes(5)
+        val ALERTS_MIN_AFTER_FAILURE: Duration = Duration.ofMinutes(2)
     }
 }

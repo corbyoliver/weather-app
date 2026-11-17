@@ -28,4 +28,10 @@ class ForecastRefreshWorkerTest {
         // The periodic run must not be cut short by the repository's wait after a success.
         assertTrue(ForecastRefreshWorker.INTERVAL > WeatherRepository.MIN_AFTER_SUCCESS)
     }
+
+    @Test fun `alert poll runs every 15 minutes and retries no sooner than the repository allows`() {
+        assertEquals(Duration.ofMinutes(15), AlertPollWorker.INTERVAL)
+        assertTrue(AlertPollWorker.RETRY_BACKOFF >= WeatherRepository.ALERTS_MIN_AFTER_FAILURE)
+        assertTrue(AlertPollWorker.INTERVAL > WeatherRepository.ALERTS_MIN_AFTER_SUCCESS)
+    }
 }

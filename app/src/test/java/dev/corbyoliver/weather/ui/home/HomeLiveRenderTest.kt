@@ -33,7 +33,7 @@ class HomeLiveRenderTest {
         assertEquals("54 · Moderate", ui.details!!.airQualityValue)
         // No NWS check yet: the screen must not imply there are no alerts.
         assertNull(ui.alert)
-        assertEquals(ALERTS_NOT_CHECKED, ui.alertsNote)
+        assertEquals(ALERTS_CHECKING, ui.alertsNote)
         assertNull(hero.rainLine)
     }
 }

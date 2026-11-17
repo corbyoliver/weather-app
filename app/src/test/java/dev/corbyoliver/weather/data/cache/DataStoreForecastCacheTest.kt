@@ -41,4 +41,15 @@ class DataStoreForecastCacheTest {
         file.writeText("this is not json")
         assertNull(withCache(file) { it.load() })
     }
+
+    @Test fun `saved alerts survive a restart`() {
+        val file = File(tmp.root, "a.json")
+        val entry = CachedNws(1794940200000, """{"features":[]}""")
+        val scope = CoroutineScope(Dispatchers.IO + Job())
+        runBlocking { DataStoreAlertsCache.create(file, scope).save(entry) }
+        scope.cancel()
+        val scope2 = CoroutineScope(Dispatchers.IO + Job())
+        assertEquals(entry, runBlocking { DataStoreAlertsCache.create(file, scope2).load() })
+        scope2.cancel()
+    }
 }
