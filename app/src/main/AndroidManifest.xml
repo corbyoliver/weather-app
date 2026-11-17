@@ -18,5 +18,38 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver
+            android:name=".ui.widget.TempRainWidgetReceiver"
+            android:label="@string/widget_temp_name"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_temp_info" />
+        </receiver>
+        <receiver
+            android:name=".ui.widget.AlertWidgetReceiver"
+            android:label="@string/widget_alert_name"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_alert_info" />
+        </receiver>
+        <receiver
+            android:name=".ui.widget.RainTimingWidgetReceiver"
+            android:label="@string/widget_rain_name"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_rain_info" />
+        </receiver>
     </application>
 </manifest>

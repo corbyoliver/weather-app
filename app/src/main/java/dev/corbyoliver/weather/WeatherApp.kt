@@ -9,11 +9,16 @@ import dev.corbyoliver.weather.data.newHttpClient
 import dev.corbyoliver.weather.data.nws.NwsClient
 import dev.corbyoliver.weather.data.openmeteo.OpenMeteoClient
 import dev.corbyoliver.weather.data.pirate.PirateWeatherClient
+import dev.corbyoliver.weather.ui.widget.WidgetUpdater
 import dev.corbyoliver.weather.work.AlertPollWorker
 import dev.corbyoliver.weather.work.ForecastRefreshWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import java.io.File
 
 /** Holds the app-wide objects. One of each per process. */
@@ -38,5 +43,20 @@ class WeatherApp : Application() {
         super.onCreate()
         ForecastRefreshWorker.schedule(this)
         AlertPollWorker.schedule(this)
+        redrawWidgetsOnChange()
+    }
+
+    /**
+     * Redraws the home-screen widgets whenever the data changes: after each
+     * background refresh, alert check or app download. Waits a second so a
+     * burst of changes gives one redraw.
+     */
+    @OptIn(FlowPreview::class)
+    private fun redrawWidgetsOnChange() {
+        appScope.launch {
+            repository.loadCache()
+            WidgetUpdater.updateAll(this@WeatherApp)
+            repository.state.drop(1).debounce(1_000).collect { WidgetUpdater.updateAll(this@WeatherApp) }
+        }
     }
 }

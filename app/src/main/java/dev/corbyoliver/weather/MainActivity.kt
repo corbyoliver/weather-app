@@ -17,6 +17,9 @@ import dev.corbyoliver.weather.ui.home.HomeScreen
 import dev.corbyoliver.weather.ui.home.HomeSource
 import dev.corbyoliver.weather.ui.home.HomeViewModel
 import dev.corbyoliver.weather.ui.theme.WeatherTheme
+import dev.corbyoliver.weather.ui.widget.AlertWidgetReceiver
+import dev.corbyoliver.weather.ui.widget.RainTimingWidgetReceiver
+import dev.corbyoliver.weather.ui.widget.TempRainWidgetReceiver
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,6 +32,7 @@ class MainActivity : ComponentActivity() {
         // Debug builds only: `--es scenario RAIN` (etc.) shows sample data for one frog look.
         val scenario = if (!BuildConfig.DEBUG) null else intent.getStringExtra("scenario")
             ?.let { name -> SampleScenario.entries.firstOrNull { it.name == name } }
+        if (BuildConfig.DEBUG) intent.getStringExtra("pinWidget")?.let { requestPinWidget(it) }
         val source = if (scenario != null) HomeSource.Sample(scenario)
         else HomeSource.Live((application as WeatherApp).repository)
         setContent {
@@ -38,6 +42,23 @@ class MainActivity : ComponentActivity() {
                 LifecycleEventEffect(Lifecycle.Event.ON_START) { vm.onForeground() }
                 HomeScreen(state, onSelectDay = vm::selectDay)
             }
+        }
+    }
+
+    /**
+     * Debug builds only, for testing: `--es pinWidget temp|alert|rain` asks
+     * the launcher to add that widget (Android shows a confirm dialog).
+     */
+    private fun requestPinWidget(which: String) {
+        val receiver = when (which) {
+            "temp" -> TempRainWidgetReceiver::class.java
+            "alert" -> AlertWidgetReceiver::class.java
+            "rain" -> RainTimingWidgetReceiver::class.java
+            else -> return
+        }
+        val manager = getSystemService(android.appwidget.AppWidgetManager::class.java)
+        if (manager.isRequestPinAppWidgetSupported) {
+            manager.requestPinAppWidget(android.content.ComponentName(this, receiver), null, null)
         }
     }
 }

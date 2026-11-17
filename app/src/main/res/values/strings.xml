@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Rain Frog</string>
+    <string name="widget_temp_name">Temperature and rain</string>
+    <string name="widget_temp_description">Temperature now and the rain chance for the next hour</string>
+    <string name="widget_alert_name">Weather alerts</string>
+    <string name="widget_alert_description">Active National Weather Service alerts</string>
+    <string name="widget_rain_name">Rain timing</string>
+    <string name="widget_rain_description">When rain starts or stops, with the next 60 minutes</string>
 </resources>
