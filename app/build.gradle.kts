@@ -64,6 +64,7 @@ dependencies {
     implementation("io.ktor:ktor-client-core:3.6.1")
     implementation("io.ktor:ktor-client-okhttp:3.6.1")
     implementation("androidx.datastore:datastore:1.3.0")
+    implementation("androidx.work:work-runtime:2.12.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
