@@ -1,0 +1,10 @@
+# Copy to local.properties (gitignored) and fill in. Never commit the real file:
+# this repository is public.
+sdk.dir=/Users/YOU/Library/Android/sdk
+
+# Free key from https://pirate-weather.apiable.io/ (create the account yourself).
+pirateWeatherApiKey=REPLACE_ME
+
+# NWS asks every client to send a User-Agent with contact details.
+# Format: "(app name, contact email)".
+nwsUserAgent=(weather-app personal build, you@example.com)

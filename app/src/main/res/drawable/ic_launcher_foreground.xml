@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Our frog's face (original character), centred in the 72dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#7BCB6A" android:pathData="M24,62a30,20 0,1 0,60 0a30,20 0,1 0,-60 0z" />
+    <path android:fillColor="#7BCB6A" android:pathData="M30,46a11,11 0,1 0,22 0a11,11 0,1 0,-22 0z" />
+    <path android:fillColor="#7BCB6A" android:pathData="M56,46a11,11 0,1 0,22 0a11,11 0,1 0,-22 0z" />
+    <path android:fillColor="#1E2A1C" android:pathData="M34.5,46a6.5,6.5 0,1 0,13 0a6.5,6.5 0,1 0,-13 0z" />
+    <path android:fillColor="#1E2A1C" android:pathData="M60.5,46a6.5,6.5 0,1 0,13 0a6.5,6.5 0,1 0,-13 0z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M37,44a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M63,44a2,2 0,1 0,4 0a2,2 0,1 0,-4 0z" />
+    <path android:strokeColor="#3E7F3A" android:strokeWidth="2.4" android:strokeLineCap="round"
+        android:pathData="M42,66q12,8 24,0" />
+</vector>

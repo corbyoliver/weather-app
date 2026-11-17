@@ -1,0 +1,7 @@
+<resources>
+    <color name="background">#1B1D25</color>
+    <color name="frog_body">#7BCB6A</color>
+    <color name="frog_belly">#C9EBB8</color>
+    <color name="frog_shade">#5DAE55</color>
+    <color name="leaf">#2E8B57</color>
+</resources>
