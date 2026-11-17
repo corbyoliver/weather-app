@@ -18,7 +18,20 @@ val PIRATE_FIXTURE by lazy {
     requireNotNull(PirateMapperTest::class.java.getResource("/fixtures/pirate-minutely-synthetic-docs-shape.json")).readText()
 }
 
+/** A live response for the home point, captured 2026-11-17 at 3:08 PM Pacific: a dry hour. */
+val PIRATE_LIVE_FIXTURE by lazy {
+    requireNotNull(PirateMapperTest::class.java.getResource("/fixtures/pirate-minutely-captured-2026-11-17.json")).readText()
+}
+
 class PirateMapperTest {
+    @Test fun `the live response maps to 61 dry minutes, one minute apart`() {
+        val m = PirateMapper.map(PIRATE_LIVE_FIXTURE)
+        assertEquals(61, m.size)
+        m.zipWithNext().forEach { (a, b) -> assertEquals(60L, b.time.epochSecond - a.time.epochSecond) }
+        assertTrue(m.all { it.intensityInPerHr == 0.0 && it.kind == PrecipKind.NONE })
+        assertTrue(m.all { it.probability != null })
+    }
+
     @Test fun `minute data is mapped in order with US units`() {
         val m = PirateMapper.map(PIRATE_FIXTURE)
         assertEquals(61, m.size)
