@@ -34,6 +34,8 @@ class HomeLiveRenderTest {
         // No NWS check yet: the screen must not imply there are no alerts.
         assertNull(ui.alert)
         assertEquals(ALERTS_CHECKING, ui.alertsNote)
-        assertNull(hero.rainLine)
+        // No Pirate Weather data: the line and strip come from Open-Meteo's 15-minute steps.
+        assertEquals("No rain expected in the next 12 hours", hero.rainLine)
+        assertEquals(12, hero.rainStrip.size)
     }
 }

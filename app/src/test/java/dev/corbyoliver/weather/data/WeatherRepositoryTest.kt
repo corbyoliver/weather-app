@@ -3,7 +3,11 @@ package dev.corbyoliver.weather.data
 import dev.corbyoliver.weather.data.cache.AlertsCache
 import dev.corbyoliver.weather.data.cache.CachedNws
 import dev.corbyoliver.weather.data.cache.CachedOpenMeteo
+import dev.corbyoliver.weather.data.cache.CachedPirate
 import dev.corbyoliver.weather.data.cache.ForecastCache
+import dev.corbyoliver.weather.data.cache.RainCache
+import dev.corbyoliver.weather.data.pirate.PIRATE_FIXTURE
+import dev.corbyoliver.weather.data.pirate.PirateSource
 import dev.corbyoliver.weather.data.nws.NWS_OREGON_FIXTURE
 import dev.corbyoliver.weather.data.nws.NWS_POINT_EMPTY_FIXTURE
 import dev.corbyoliver.weather.data.nws.NwsSource
@@ -48,13 +52,27 @@ private class FakeAlertsCache(var entry: CachedNws? = null) : AlertsCache {
     override suspend fun save(value: CachedNws) { saves++; entry = value }
 }
 
+private class FakePirate : PirateSource {
+    var body: () -> String = { PIRATE_FIXTURE }
+    var calls = 0
+    override suspend fun forecastJson(): String { calls++; return body() }
+}
+
+private class FakeRainCache(var entry: CachedPirate? = null) : RainCache {
+    override suspend fun load(): CachedPirate? = entry
+    override suspend fun save(value: CachedPirate) { entry = value }
+}
+
 class WeatherRepositoryTest {
     private var now: Instant = FIXTURE_FETCHED_AT
     private val source = FakeSource()
     private val cache = FakeCache()
     private val nws = FakeNws()
     private val alertsCache = FakeAlertsCache()
-    private fun repo() = WeatherRepository(source, cache, nws, alertsCache, clock = { now }, log = { _, _ -> })
+    private val pirate = FakePirate()
+    private val rainCache = FakeRainCache()
+    private fun repo(withKey: Boolean = true) =
+        WeatherRepository(source, cache, nws, alertsCache, if (withKey) pirate else null, rainCache, clock = { now }, log = { _, _ -> })
     private fun offline() { source.forecast = { throw SourceException("Open-Meteo could not be reached (UnknownHostException).") } }
     private fun cachedEntry(at: Instant) = CachedOpenMeteo(at.toEpochMilli(), FORECAST_FIXTURE, AIR_QUALITY_FIXTURE)
 
@@ -246,5 +264,45 @@ class WeatherRepositoryTest {
         r.refreshAlerts()
         r.refresh(force = true)
         assertEquals(2, r.state.value.alerts.alerts?.size)
+    }
+
+    // ---- Pirate Weather ----
+
+    @Test fun `without an API key, rain timing is never downloaded`() = runBlocking {
+        val r = repo(withKey = false)
+        assertEquals(RefreshResult.SKIPPED, r.refreshRain())
+        assertEquals(false, r.state.value.rain.configured)
+        assertEquals(0, pirate.calls)
+    }
+
+    @Test fun `a successful rain download is shown and cached`() = runBlocking {
+        val r = repo()
+        assertEquals(RefreshResult.UPDATED, r.refreshRain())
+        assertEquals(61, r.state.value.rain.minutes?.size)
+        assertEquals(now, r.state.value.rain.fetchedAt)
+        assertEquals(PIRATE_FIXTURE, rainCache.entry?.json)
+    }
+
+    @Test fun `rain timing waits 10 minutes after a success and 5 after a failure`() = runBlocking {
+        val r = repo()
+        r.refreshRain()
+        now = now.plus(Duration.ofMinutes(9))
+        assertEquals(RefreshResult.SKIPPED, r.refreshRain())
+        now = now.plus(Duration.ofMinutes(1))
+        pirate.body = { throw SourceException("Pirate Weather error (HTTP 401).") }
+        assertEquals(RefreshResult.FAILED, r.refreshRain())
+        assertEquals(61, r.state.value.rain.minutes?.size) // last good data kept
+        assertEquals("Pirate Weather error (HTTP 401).", r.state.value.rain.lastError)
+        now = now.plus(Duration.ofMinutes(4))
+        assertEquals(RefreshResult.SKIPPED, r.refreshRain())
+        assertEquals(2, pirate.calls)
+    }
+
+    @Test fun `cached rain timing loads on start`() = runBlocking {
+        rainCache.entry = CachedPirate(now.toEpochMilli(), PIRATE_FIXTURE)
+        val r = repo()
+        r.loadCache()
+        assertEquals(61, r.state.value.rain.minutes?.size)
+        assertEquals(RefreshResult.SKIPPED, r.refreshRain())
     }
 }

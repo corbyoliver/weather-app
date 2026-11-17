@@ -8,7 +8,8 @@ decisions behind it are in [CLAUDE.md](CLAUDE.md).
 
 1. Copy `local.properties.example` to `local.properties` and fill it in.
    That file is gitignored: this repository is public, so keys and the NWS
-   contact email never go in git.
+   contact email never go in git. Without `pirateWeatherApiKey` the app still
+   works: the rain-timing line then comes from Open-Meteo's 15-minute data.
 2. `./gradlew testDebugUnitTest` runs the unit tests.
 3. `./gradlew assembleDebug` builds `app/build/outputs/apk/debug/app-debug.apk`.
 

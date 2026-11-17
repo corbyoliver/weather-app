@@ -4,7 +4,11 @@ import android.util.Log
 import dev.corbyoliver.weather.data.cache.AlertsCache
 import dev.corbyoliver.weather.data.cache.CachedNws
 import dev.corbyoliver.weather.data.cache.CachedOpenMeteo
+import dev.corbyoliver.weather.data.cache.CachedPirate
 import dev.corbyoliver.weather.data.cache.ForecastCache
+import dev.corbyoliver.weather.data.cache.RainCache
+import dev.corbyoliver.weather.data.pirate.PirateMapper
+import dev.corbyoliver.weather.data.pirate.PirateSource
 import dev.corbyoliver.weather.data.nws.NwsMapper
 import dev.corbyoliver.weather.data.nws.NwsSource
 import dev.corbyoliver.weather.data.openmeteo.OpenMeteoMapper
@@ -12,6 +16,7 @@ import dev.corbyoliver.weather.data.openmeteo.OpenMeteoSource
 import dev.corbyoliver.weather.domain.Alert
 import dev.corbyoliver.weather.domain.Forecast
 import dev.corbyoliver.weather.domain.HomeLocation
+import dev.corbyoliver.weather.domain.RainMinute
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,6 +42,19 @@ data class AlertsSnapshot(
     val lastError: String? = null,
 )
 
+/**
+ * Pirate Weather minute-by-minute rain, as last known. [minutes] is null
+ * until one download succeeded. When it is missing, old or failing, the
+ * screen falls back to Open-Meteo's 15-minute data.
+ */
+data class RainSnapshot(
+    /** False when no API key is set: the app then always uses the fallback. */
+    val configured: Boolean = true,
+    val minutes: List<RainMinute>? = null,
+    val fetchedAt: Instant? = null,
+    val lastError: String? = null,
+)
+
 /** What the screens see. [forecast] is the last good data, even after a failed refresh. */
 data class WeatherSnapshot(
     val forecast: Forecast? = null,
@@ -44,13 +62,14 @@ data class WeatherSnapshot(
     val lastError: String? = null,
     val refreshing: Boolean = false,
     val alerts: AlertsSnapshot = AlertsSnapshot(),
+    val rain: RainSnapshot = RainSnapshot(),
 )
 
 enum class RefreshResult { UPDATED, SKIPPED, FAILED }
 
 /**
  * The one place screens get weather from: Open-Meteo for the forecast, NWS
- * for alerts (Pirate Weather joins in a later step).
+ * for alerts, Pirate Weather for minute-by-minute rain timing.
  *
  * The last good download from each source is cached on disk, so the app
  * opens with data even when offline. A failed download never replaces good
@@ -61,11 +80,14 @@ class WeatherRepository(
     private val cache: ForecastCache,
     private val nws: NwsSource,
     private val alertsCache: AlertsCache,
+    /** Null when no Pirate Weather API key is set. */
+    private val pirate: PirateSource?,
+    private val rainCache: RainCache,
     private val clock: () -> Instant = Instant::now,
     private val zone: ZoneId = HomeLocation.ZONE,
     private val log: (String, Throwable?) -> Unit = { msg, e -> Log.w(TAG, msg, e) },
 ) {
-    private val _state = MutableStateFlow(WeatherSnapshot())
+    private val _state = MutableStateFlow(WeatherSnapshot(rain = RainSnapshot(configured = pirate != null)))
     val state: StateFlow<WeatherSnapshot> = _state.asStateFlow()
 
     private val forecastMutex = Mutex()
@@ -77,10 +99,15 @@ class WeatherRepository(
     private var alertsCacheLoaded = false
     private var lastAlertsFailureAt: Instant? = null
 
+    private val rainMutex = Mutex()
+    private var rainCacheLoaded = false
+    private var lastRainFailureAt: Instant? = null
+
     /** Shows the cached forecast and alerts, if any. Safe to call more than once. */
     suspend fun loadCache() {
         forecastMutex.withLock { loadForecastCacheLocked() }
         alertsMutex.withLock { loadAlertsCacheLocked() }
+        rainMutex.withLock { loadRainCacheLocked() }
     }
 
     /**
@@ -161,6 +188,61 @@ class WeatherRepository(
         }
     }
 
+    /**
+     * Downloads Pirate Weather's next 60 minutes, at most once every
+     * [RAIN_MIN_AFTER_SUCCESS] (the spec caches it 5-10 minutes) and not
+     * within [RAIN_MIN_AFTER_FAILURE] of a failure. Called when the app
+     * opens, never in the background, to stay well inside the free plan.
+     */
+    suspend fun refreshRain(force: Boolean = false): RefreshResult = rainMutex.withLock {
+        val source = pirate ?: return RefreshResult.SKIPPED
+        loadRainCacheLocked()
+        val now = clock()
+        if (!force) {
+            val lastSuccess = _state.value.rain.fetchedAt
+            if (lastSuccess != null && isWithin(lastSuccess, now, RAIN_MIN_AFTER_SUCCESS)) return RefreshResult.SKIPPED
+            val lastFailure = lastRainFailureAt
+            if (lastFailure != null && isWithin(lastFailure, now, RAIN_MIN_AFTER_FAILURE)) return RefreshResult.SKIPPED
+        }
+        try {
+            val json = source.forecastJson()
+            val minutes = PirateMapper.map(json)
+            try {
+                rainCache.save(CachedPirate(now.toEpochMilli(), json))
+            } catch (e: IOException) {
+                log("Could not save the rain timing cache", e)
+            }
+            lastRainFailureAt = null
+            _state.update { it.copy(rain = it.rain.copy(minutes = minutes, fetchedAt = now, lastError = null)) }
+            return RefreshResult.UPDATED
+        } catch (e: SourceException) {
+            // No stack trace: it could quote the request URL, which holds the API key.
+            log("Rain timing download failed: ${e.message}", null)
+            lastRainFailureAt = now
+            _state.update { it.copy(rain = it.rain.copy(lastError = e.message)) }
+            return RefreshResult.FAILED
+        }
+    }
+
+    private suspend fun loadRainCacheLocked() {
+        if (rainCacheLoaded || pirate == null) return
+        rainCacheLoaded = true
+        val entry = try {
+            rainCache.load()
+        } catch (e: IOException) {
+            log("Could not read the rain timing cache", e)
+            null
+        } ?: return
+        val minutes = try {
+            PirateMapper.map(entry.json)
+        } catch (e: SourceException) {
+            log("Cached rain timing could not be read; ignoring it", null)
+            return
+        }
+        val at = Instant.ofEpochMilli(entry.fetchedAtEpochMs)
+        _state.update { if (it.rain.fetchedAt == null) it.copy(rain = it.rain.copy(minutes = minutes, fetchedAt = at)) else it }
+    }
+
     private suspend fun loadForecastCacheLocked() {
         if (forecastCacheLoaded) return
         forecastCacheLoaded = true
@@ -212,5 +294,7 @@ class WeatherRepository(
         val MIN_AFTER_FAILURE: Duration = Duration.ofMinutes(5)
         val ALERTS_MIN_AFTER_SUCCESS: Duration = Duration.ofMinutes(5)
         val ALERTS_MIN_AFTER_FAILURE: Duration = Duration.ofMinutes(2)
+        val RAIN_MIN_AFTER_SUCCESS: Duration = Duration.ofMinutes(10)
+        val RAIN_MIN_AFTER_FAILURE: Duration = Duration.ofMinutes(5)
     }
 }

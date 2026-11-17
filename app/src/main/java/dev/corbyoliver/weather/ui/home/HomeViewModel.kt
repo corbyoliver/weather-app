@@ -61,17 +61,21 @@ class HomeViewModel(private val source: HomeSource) : ViewModel() {
         if (source is HomeSource.Live) {
             viewModelScope.launch(Dispatchers.IO) { source.repository.refresh() }
             viewModelScope.launch(Dispatchers.IO) { source.repository.refreshAlerts() }
+            viewModelScope.launch(Dispatchers.IO) { source.repository.refreshRain() }
         }
     }
 }
 
 internal fun renderLive(snap: WeatherSnapshot, selectedDay: Int, now: Instant): HomeUiState {
     val alerts = presentAlerts(snap.alerts, now)
+    val rain = presentRain(snap, now)
     return presentHome(
         HomeInputs(
             forecast = snap.forecast,
             now = now,
             selectedDay = selectedDay,
+            rainLine = rain.line,
+            rainStrip = rain.strip,
             alert = alerts.banner,
             alertsNote = alerts.note,
             message = liveMessage(snap),

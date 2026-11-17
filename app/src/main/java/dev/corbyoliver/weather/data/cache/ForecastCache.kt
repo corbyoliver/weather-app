@@ -30,12 +30,19 @@ data class CachedOpenMeteo(
 @Serializable
 data class CachedNws(val fetchedAtEpochMs: Long, val alertsJson: String)
 
+/** The last good Pirate Weather download, kept as the raw JSON. */
+@Serializable
+data class CachedPirate(val fetchedAtEpochMs: Long, val json: String)
+
 /** What is written to disk. An empty file means "nothing cached yet". */
 @Serializable
 data class OpenMeteoCacheFile(val entry: CachedOpenMeteo? = null)
 
 @Serializable
 data class NwsCacheFile(val entry: CachedNws? = null)
+
+@Serializable
+data class PirateCacheFile(val entry: CachedPirate? = null)
 
 interface ForecastCache {
     suspend fun load(): CachedOpenMeteo?
@@ -45,6 +52,11 @@ interface ForecastCache {
 interface AlertsCache {
     suspend fun load(): CachedNws?
     suspend fun save(value: CachedNws)
+}
+
+interface RainCache {
+    suspend fun load(): CachedPirate?
+    suspend fun save(value: CachedPirate)
 }
 
 /** Stores one @Serializable value as JSON. A file that cannot be read is reported as corrupt. */
@@ -64,6 +76,7 @@ class JsonFileSerializer<T>(private val serializer: KSerializer<T>, override val
 
 val OpenMeteoCacheSerializer = JsonFileSerializer(OpenMeteoCacheFile.serializer(), OpenMeteoCacheFile())
 val NwsCacheSerializer = JsonFileSerializer(NwsCacheFile.serializer(), NwsCacheFile())
+val PirateCacheSerializer = JsonFileSerializer(PirateCacheFile.serializer(), PirateCacheFile())
 
 /**
  * Only one DataStore may be open per file, so create each once (the
@@ -96,5 +109,16 @@ class DataStoreAlertsCache(private val store: DataStore<NwsCacheFile>) : AlertsC
 
     companion object {
         fun create(file: File, scope: CoroutineScope) = DataStoreAlertsCache(jsonDataStore(file, NwsCacheSerializer, scope))
+    }
+}
+
+class DataStoreRainCache(private val store: DataStore<PirateCacheFile>) : RainCache {
+    override suspend fun load(): CachedPirate? = store.data.first().entry
+    override suspend fun save(value: CachedPirate) {
+        store.updateData { PirateCacheFile(value) }
+    }
+
+    companion object {
+        fun create(file: File, scope: CoroutineScope) = DataStoreRainCache(jsonDataStore(file, PirateCacheSerializer, scope))
     }
 }
