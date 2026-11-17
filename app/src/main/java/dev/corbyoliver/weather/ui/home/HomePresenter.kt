@@ -19,7 +19,8 @@ import kotlin.math.roundToInt
 data class HomeInputs(
     val forecast: Forecast?,
     val now: Instant,
-    val selectedDay: Int = 0,
+    /** The day the user picked, by date, so it survives midnight; null means today. */
+    val selectedDate: LocalDate? = null,
     val zone: ZoneId = HomeLocation.ZONE,
     val rainLine: String? = null,
     val rainStrip: List<Float?> = emptyList(),
@@ -65,11 +66,13 @@ fun presentHome(input: HomeInputs, thresholds: FrogThresholds = FrogThresholds()
 
     // Never show days that are already over (an old cached forecast).
     val days = f.days.filter { !it.date.isBefore(today) }
-    val selected = input.selectedDay.coerceIn(0, (days.size - 1).coerceAtLeast(0))
+    // A picked day that has passed falls back to today.
+    val selected = days.indexOfFirst { it.date == input.selectedDate }.takeIf { it >= 0 } ?: 0
     val chips = days.map { d ->
         val label = if (d.date == today) "Today" else d.date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.US)
         val full = if (d.date == today) "Today" else d.date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.US)
         DayChipUi(
+            date = d.date,
             label = label,
             condition = d.condition,
             high = Format.temp(d.highF),
@@ -82,9 +85,9 @@ fun presentHome(input: HomeInputs, thresholds: FrogThresholds = FrogThresholds()
 
     val age = Duration.between(f.fetchedAt, now)
     val stale = age > STALE_AFTER
-    val whenText = if (f.fetchedAt.atZone(zone).toLocalDate() == today) Format.clock(f.fetchedAt, zone) else Format.dayClock(f.fetchedAt, zone)
+    val updatedText = Format.updated(f.fetchedAt, now, zone)
     val updated = UpdatedUi(
-        text = if (stale) "Updated $whenText · out of date" else "Updated $whenText",
+        text = if (stale) "$updatedText · out of date" else updatedText,
         isStale = stale,
     )
 
@@ -104,25 +107,29 @@ private fun presentDay(f: Forecast, date: LocalDate, today: LocalDate, now: Inst
     val day = f.days.first { it.date == date }
     val isToday = date == today
 
-    // Rain bars: each bar is the hour that STARTS at (t - 1h).
-    val bars = f.hours
-        .map { it to it.time.minus(Duration.ofHours(1)) }
-        .filter { (_, start) -> start.atZone(zone).toLocalDate() == date }
-        .map { (h, start) ->
-            val hourOfDay = start.atZone(zone).hour
-            BarUi(
-                label = Format.shortHour(start, zone),
-                chancePct = h.precipChancePrevHourPct,
-                isPast = h.time <= now,
-                showLabel = hourOfDay % 6 == 0,
-            )
-        }
-    val peak = f.hours
-        .filter { it.time.minus(Duration.ofHours(1)).atZone(zone).toLocalDate() == date }
-        .filter { it.precipChancePrevHourPct != null }
-        .maxByOrNull { it.precipChancePrevHourPct!! }
-    val precipDescription = if (peak == null) "Hourly rain chance not available" else
-        "Hourly rain chance peaks at ${peak.precipChancePrevHourPct}% around ${Format.hour(peak.time.minus(Duration.ofHours(1)), zone)}"
+    // Rain bars: one per local hour of the day. A step at t covers the hour that
+    // starts at t - 1h. An hour with no step (the last day's 11 PM, which needs
+    // the next day's midnight step) is shown as unknown, never dropped.
+    val byEnd = f.hours.associateBy { it.time }
+    val dayStart = date.atStartOfDay(zone).toInstant()
+    val nextStart = date.plusDays(1).atStartOfDay(zone).toInstant()
+    val starts = generateSequence(dayStart) { it.plus(Duration.ofHours(1)) }.takeWhile { it.isBefore(nextStart) }.toList()
+    val bars = starts.map { start ->
+        val end = start.plus(Duration.ofHours(1))
+        BarUi(
+            label = Format.shortHour(start, zone),
+            chancePct = byEnd[end]?.precipChancePrevHourPct,
+            isPast = end <= now,
+            showLabel = start.atZone(zone).hour % 6 == 0,
+        )
+    }
+    val known = starts.mapNotNull { start -> byEnd[start.plus(Duration.ofHours(1))]?.precipChancePrevHourPct?.let { start to it } }
+    val peak = known.maxByOrNull { it.second }
+    val precipDescription = when {
+        peak == null -> "Hourly rain chance not available"
+        peak.second == 0 -> "No rain expected: 0% chance every hour"
+        else -> "Hourly rain chance peaks at ${peak.second}% around ${Format.hour(peak.first, zone)}"
+    }
 
     val dayHours = f.hours.filter { it.time.atZone(zone).toLocalDate() == date }
     val windHours = dayHours.filter { it.time.atZone(zone).hour % 3 == 0 }.map { h ->

@@ -36,7 +36,7 @@ data class WidgetsUi(val temp: TempWidgetUi, val alert: AlertWidgetUi, val rain:
 fun presentWidgets(snap: WeatherSnapshot, now: Instant, zone: ZoneId = HomeLocation.ZONE): WidgetsUi {
     val f = snap.forecast
     val rain = presentRain(snap, now, zone)
-    val updated = f?.fetchedAt?.let { updatedText(it, now, zone) } ?: "No forecast yet"
+    val updated = f?.fetchedAt?.let { Format.updated(it, now, zone) } ?: "No forecast yet"
     val stale = f != null && Duration.between(f.fetchedAt, now) > STALE_AFTER
 
     val temp = if (f == null) {
@@ -76,7 +76,3 @@ fun presentWidgets(snap: WeatherSnapshot, now: Instant, zone: ZoneId = HomeLocat
     )
     return WidgetsUi(temp, alert, rainUi)
 }
-
-private fun updatedText(t: Instant, now: Instant, zone: ZoneId): String =
-    if (t.atZone(zone).toLocalDate() == now.atZone(zone).toLocalDate()) "Updated ${Format.clock(t, zone)}"
-    else "Updated ${Format.dayClock(t, zone)}"

@@ -190,7 +190,10 @@ private fun androidx.glance.layout.RowScope.StripBar(v: Float?) {
             modifier = GlanceModifier.fillMaxSize().cornerRadius(6.dp).background(Tokens.Tile),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            if (v != null && v > 0f) {
+            if (v == null) {
+                // Unknown, never drawn as dry.
+                Box(GlanceModifier.size(4.dp).cornerRadius(2.dp).background(Tokens.TextMuted)) {}
+            } else if (v > 0f) {
                 val h = (STRIP_HEIGHT * v.coerceIn(0.12f, 1f)).toInt().coerceAtLeast(4)
                 Box(GlanceModifier.fillMaxWidth().height(h.dp).cornerRadius(6.dp).background(Tokens.Accent)) {}
             }

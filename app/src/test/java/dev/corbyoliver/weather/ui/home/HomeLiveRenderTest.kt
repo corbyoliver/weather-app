@@ -22,7 +22,7 @@ class HomeLiveRenderTest {
     }
 
     @Test fun `live data from the captured response fills the home screen`() {
-        val ui = renderLive(WeatherSnapshot(forecast = forecast), 0, FIXTURE_FETCHED_AT.plus(Duration.ofMinutes(5)))
+        val ui = renderLive(WeatherSnapshot(forecast = forecast), null, FIXTURE_FETCHED_AT.plus(Duration.ofMinutes(5)))
         val hero = ui.hero!!
         assertEquals("47°", hero.temperature)
         assertEquals("Columbia City, OR", hero.place)

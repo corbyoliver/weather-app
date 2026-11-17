@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalDate
 
 /** Where the home screen gets its weather. */
 sealed interface HomeSource {
@@ -27,7 +28,8 @@ sealed interface HomeSource {
 }
 
 class HomeViewModel(private val source: HomeSource) : ViewModel() {
-    private val selectedDay = MutableStateFlow(0)
+    /** Remembered by date, not position: the list loses a day at midnight. */
+    private val selectedDate = MutableStateFlow<LocalDate?>(null)
 
     /** Ticks once a minute so "Now", the hourly row and "out of date" follow the clock. */
     private val minuteTicks = flow {
@@ -38,10 +40,10 @@ class HomeViewModel(private val source: HomeSource) : ViewModel() {
     }
 
     val state: StateFlow<HomeUiState> = when (source) {
-        is HomeSource.Live -> combine(source.repository.state, selectedDay, minuteTicks) { snap, day, _ ->
+        is HomeSource.Live -> combine(source.repository.state, selectedDate, minuteTicks) { snap, day, _ ->
             renderLive(snap, day, Instant.now())
         }
-        is HomeSource.Sample -> combine(selectedDay, minuteTicks) { day, _ ->
+        is HomeSource.Sample -> combine(selectedDate, minuteTicks) { day, _ ->
             renderSample(source.scenario, day, Instant.now())
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState(message = "Loading forecast…"))
@@ -53,7 +55,7 @@ class HomeViewModel(private val source: HomeSource) : ViewModel() {
     }
 
     fun selectDay(i: Int) {
-        selectedDay.value = i
+        state.value.days.getOrNull(i)?.let { selectedDate.value = it.date }
     }
 
     /** Called each time the screen comes to the front. The repository skips the download if the data is recent. */
@@ -66,14 +68,14 @@ class HomeViewModel(private val source: HomeSource) : ViewModel() {
     }
 }
 
-internal fun renderLive(snap: WeatherSnapshot, selectedDay: Int, now: Instant): HomeUiState {
+internal fun renderLive(snap: WeatherSnapshot, selectedDate: LocalDate?, now: Instant): HomeUiState {
     val alerts = presentAlerts(snap.alerts, now)
     val rain = presentRain(snap, now)
     return presentHome(
         HomeInputs(
             forecast = snap.forecast,
             now = now,
-            selectedDay = selectedDay,
+            selectedDate = selectedDate,
             rainLine = rain.line,
             rainStrip = rain.strip,
             nowcast = rain.nowcast,
@@ -94,11 +96,11 @@ internal fun liveMessage(snap: WeatherSnapshot): String? {
     }
 }
 
-private fun renderSample(scenario: SampleScenario, selectedDay: Int, now: Instant): HomeUiState = presentHome(
+private fun renderSample(scenario: SampleScenario, selectedDate: LocalDate?, now: Instant): HomeUiState = presentHome(
     HomeInputs(
         forecast = SampleData.forecast(now, scenario),
         now = now,
-        selectedDay = selectedDay,
+        selectedDate = selectedDate,
         rainLine = "Rain eases in ~25 min · returns around 8 PM",
         alert = AlertBannerUi(
             text = "Wind Advisory until 9 PM · NWS",

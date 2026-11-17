@@ -40,6 +40,7 @@ data class HeroUi(
 data class HourCellUi(val label: String, val temperature: String, val condition: Condition, val isDay: Boolean)
 
 data class DayChipUi(
+    val date: java.time.LocalDate,
     val label: String,
     val condition: Condition,
     val high: String,

@@ -59,12 +59,11 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -100,11 +99,7 @@ fun HomeScreen(state: HomeUiState, onSelectDay: (Int) -> Unit) {
             item("alerts-note") { StatusNote(note) }
         }
         state.hero?.let { hero -> item("hero") { HeroCard(hero) } }
-        if (state.hero == null && state.message != null) {
-            item("message") { StatusNote(state.message) }
-        } else if (state.message != null) {
-            item("message") { StatusNote(state.message) }
-        }
+        state.message?.let { msg -> item("message") { StatusNote(msg) } }
         if (state.days.isNotEmpty()) {
             item("days") { DayChips(state.days, state.selectedDay, onSelectDay) }
         }
@@ -181,8 +176,9 @@ fun HeroCard(hero: HeroUi) {
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                // Only the temperature here: the condition and "Feels like" lines below speak for themselves.
                 modifier = Modifier.semantics(mergeDescendants = true) {
-                    contentDescription = "${hero.temperature}, ${hero.conditionText}, ${hero.feelsLike}"
+                    contentDescription = "Temperature ${hero.temperature}"
                 },
             ) {
                 Text(hero.temperature, style = MaterialTheme.typography.displayLarge)
@@ -244,10 +240,14 @@ fun WeatherIcon(condition: Condition, isDay: Boolean, modifier: Modifier = Modif
     Canvas(modifier) { drawWeatherIcon(condition, isDay) }
 }
 
-/** Next 60 minutes of rain intensity (0..1); null is unknown and drawn as a gap. */
+/**
+ * Next 60 minutes of rain intensity (0..1). Null is unknown and drawn as a
+ * small dot, never as a dry bar. Hidden from screen readers: the rain
+ * sentence above it says the same thing in words.
+ */
 @Composable
 fun RainStrip(values: List<Float?>, modifier: Modifier = Modifier) {
-    Column(modifier) {
+    Column(modifier.clearAndSetSemantics { }) {
         Canvas(Modifier.fillMaxWidth().weight(1f)) {
             val n = values.size
             if (n == 0) return@Canvas
@@ -256,7 +256,9 @@ fun RainStrip(values: List<Float?>, modifier: Modifier = Modifier) {
             values.forEachIndexed { i, v ->
                 val x = i * (bw + gap)
                 drawRoundRect(Tokens.Tile, Offset(x, 0f), Size(bw, size.height), CornerRadius(bw / 2))
-                if (v != null && v > 0f) {
+                if (v == null) {
+                    drawCircle(Tokens.TextMuted, minOf(bw, size.height) * 0.18f, Offset(x + bw / 2, size.height / 2))
+                } else if (v > 0f) {
                     val bh = size.height * v.coerceIn(0.12f, 1f)
                     drawRoundRect(Tokens.Accent, Offset(x, size.height - bh), Size(bw, bh), CornerRadius(bw / 2))
                 }
@@ -424,15 +426,21 @@ fun Footer(updated: UpdatedUi?) {
             )
             Spacer(Modifier.height(6.dp))
         }
-        // Open-Meteo data is CC BY 4.0: the credit links to open-meteo.com.
+        // Open-Meteo data is CC BY 4.0: the credit links to open-meteo.com. The
+        // whole credit is the tap target, so it meets the 48dp minimum.
+        val uriHandler = LocalUriHandler.current
         val credit = buildAnnotatedString {
             append("Forecast: ")
-            withLink(LinkAnnotation.Url(OPEN_METEO_URL, TextLinkStyles(SpanStyle(color = Tokens.Accent, textDecoration = TextDecoration.Underline)))) {
-                append("Open-Meteo")
-            }
+            withStyle(SpanStyle(color = Tokens.Accent, textDecoration = TextDecoration.Underline)) { append("Open-Meteo") }
             append(ATTRIBUTION.removePrefix("Forecast: Open-Meteo"))
         }
-        Text(credit, style = MaterialTheme.typography.labelSmall, color = Tokens.TextMuted)
+        Box(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .clickable(role = Role.Button, onClickLabel = "Open the Open-Meteo website") { uriHandler.openUri(OPEN_METEO_URL) },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(credit, style = MaterialTheme.typography.labelSmall, color = Tokens.TextMuted)
+        }
     }
 }
 
