@@ -92,3 +92,25 @@ These thresholds are starting suggestions and should be easy to change in one pl
   alert widget. The alert poll still runs so both stay current, but the app
   never posts an Android notification and never asks for the notification
   permission.
+
+## Decisions (2026-11-17, during steps 2-8)
+- **APK signing: a personal key**, made once with `scripts/create-signing-key.sh`,
+  kept at `~/.rain-frog/rain-frog-release.p12` (outside the repo). Its path
+  and password live in the git-ignored `local.properties`. Every build is
+  signed with it when present. Android only installs an update signed with
+  the same key, so never replace it; Corbett backs up the file and password.
+- **The phone gets the debug build** (`assembleDebug`), signed with that key.
+- **Test hooks are off by default.** The `--es scenario …` sample weather and
+  `--es pinWidget …` extras work only in builds made with `-PtestHooks`.
+  Never install a `-PtestHooks` build on the phone.
+- **Pirate Weather is called only when the app opens** (at most every 10 min),
+  never from background jobs, to stay inside the free 10,000 calls a month.
+  Widgets therefore use Open-Meteo's 15-minute data unless the app was
+  opened in the last hour.
+- **Secrets are entered with scripts, never typed into chat**:
+  `scripts/set-pirate-key.sh` (API key) and `scripts/create-signing-key.sh`
+  (signing password). Both read with hidden input.
+
+## Status
+Steps 1-8 are done (2026-11-17). Installing on the phone and checking it
+there is issue #4.
