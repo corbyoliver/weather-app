@@ -10,3 +10,6 @@ build/
 .DS_Store
 .kotlin/
 captures/
+
+# Zipped APKs for sharing (built files, not source)
+dist/
