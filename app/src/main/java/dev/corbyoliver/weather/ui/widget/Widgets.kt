@@ -46,6 +46,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import dev.corbyoliver.weather.MainActivity
 import dev.corbyoliver.weather.WeatherApp
+import dev.corbyoliver.weather.data.WeatherSnapshot
 import dev.corbyoliver.weather.domain.Condition
 import dev.corbyoliver.weather.ui.draw.drawWeatherIcon
 import dev.corbyoliver.weather.ui.theme.Tokens
@@ -60,10 +61,25 @@ import java.time.Instant
 
 private fun c(color: Color) = ColorProvider(color)
 
+/**
+ * The three widgets redraw together, so the shared presentation is computed
+ * once per data change (and at most once a minute) and reused by all three.
+ */
+private object WidgetData {
+    private var last: Triple<WeatherSnapshot, Long, WidgetsUi>? = null
+
+    @Synchronized
+    fun get(snap: WeatherSnapshot, now: Instant): WidgetsUi {
+        val minute = now.epochSecond / 60
+        last?.let { (s, m, ui) -> if (s === snap && m == minute) return ui }
+        return presentWidgets(snap, now).also { last = Triple(snap, minute, it) }
+    }
+}
+
 private suspend fun loadWidgets(context: Context): WidgetsUi {
     val repository = (context.applicationContext as WeatherApp).repository
     repository.loadCache()
-    return presentWidgets(repository.state.value, Instant.now())
+    return WidgetData.get(repository.state.value, Instant.now())
 }
 
 /** Draws a weather glyph into a bitmap, since widgets cannot draw on a canvas. */

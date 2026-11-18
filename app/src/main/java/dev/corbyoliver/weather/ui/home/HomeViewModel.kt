@@ -92,7 +92,7 @@ internal fun liveMessage(snap: WeatherSnapshot, now: Instant): String? {
     return when {
         snap.forecast == null && error != null -> "Could not load the forecast. $error"
         snap.forecast == null -> "Loading forecast…"
-        error != null -> "Could not update. $error Showing the forecast from ${Format.updated(snap.forecast.fetchedAt, now, HomeLocation.ZONE).removePrefix("Updated ")}."
+        error != null -> "Could not update. $error Showing the forecast from ${Format.clockOrDay(snap.forecast.fetchedAt, now, HomeLocation.ZONE)}."
         else -> null
     }
 }

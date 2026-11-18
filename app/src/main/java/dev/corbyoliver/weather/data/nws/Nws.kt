@@ -14,10 +14,16 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
 
 /*
- * NWS alerts API, checked against https://www.weather.gov/documentation/services-web-api
- * and live responses on 2026-11-17 (test fixtures nws-alerts-*-captured-2026-11-17.json).
- * GET /alerts/active?point=lat,lon returns a GeoJSON FeatureCollection. The
- * service asks every client for a User-Agent with contact details.
+ * NWS alerts API. Docs read 2026-11-17: https://www.weather.gov/documentation/services-web-api,
+ * https://www.weather.gov/documentation/services-web-alerts and the API FAQ.
+ * - A User-Agent is required (403 without it); contact details let NWS reach us.
+ * - GET /alerts/active?point=lat,lon. Poll no more often than every 30 s (we poll
+ *   every 15 min). Rate limits are not published; a blocked client should stop
+ *   and wait. Errors are application/problem+json (title, detail).
+ * The docs do not define the alert fields (they point to the CAP 1.2 spec), so
+ * the shape below (GeoJSON FeatureCollection, properties.status / messageType /
+ * onset / ends / expires / references) was confirmed from live responses captured
+ * the same day (test fixtures nws-alerts-*-captured-2026-11-17.json).
  */
 
 /** Where the raw NWS JSON comes from. */

@@ -90,6 +90,8 @@ class WeatherRepository(
     private val _state = MutableStateFlow(WeatherSnapshot(rain = RainSnapshot(configured = pirate != null)))
     val state: StateFlow<WeatherSnapshot> = _state.asStateFlow()
 
+    /** Guards the one-time cache loads. Never held during a download. */
+    private val cacheMutex = Mutex()
     private val forecastMutex = Mutex()
     private var forecastCacheLoaded = false
     private var cached: CachedOpenMeteo? = null
@@ -104,10 +106,10 @@ class WeatherRepository(
     private var lastRainFailureAt: Instant? = null
 
     /** Shows the cached forecast and alerts, if any. Safe to call more than once. */
-    suspend fun loadCache() {
-        forecastMutex.withLock { loadForecastCacheLocked() }
-        alertsMutex.withLock { loadAlertsCacheLocked() }
-        rainMutex.withLock { loadRainCacheLocked() }
+    suspend fun loadCache() = cacheMutex.withLock {
+        loadForecastCacheLocked()
+        loadAlertsCacheLocked()
+        loadRainCacheLocked()
     }
 
     /**
@@ -116,7 +118,7 @@ class WeatherRepository(
      * [MIN_AFTER_FAILURE] ago. [force] skips both waits.
      */
     suspend fun refresh(force: Boolean = false): RefreshResult = forecastMutex.withLock {
-        loadForecastCacheLocked()
+        loadCache()
         val now = clock()
         if (!force) {
             val lastSuccess = _state.value.forecast?.fetchedAt
@@ -161,7 +163,7 @@ class WeatherRepository(
      * [ALERTS_MIN_AFTER_FAILURE] ago. [force] skips both waits.
      */
     suspend fun refreshAlerts(force: Boolean = false): RefreshResult = alertsMutex.withLock {
-        loadAlertsCacheLocked()
+        loadCache()
         val now = clock()
         if (!force) {
             val lastSuccess = _state.value.alerts.checkedAt
@@ -196,7 +198,7 @@ class WeatherRepository(
      */
     suspend fun refreshRain(force: Boolean = false): RefreshResult = rainMutex.withLock {
         val source = pirate ?: return RefreshResult.SKIPPED
-        loadRainCacheLocked()
+        loadCache()
         val now = clock()
         if (!force) {
             val lastSuccess = _state.value.rain.fetchedAt

@@ -33,9 +33,12 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 `-r` updates the installed app and keeps its data. The app has no location
 or notification permissions to grant.
 
-Debug builds accept a sample-weather scenario for checking each frog look:
+Test builds (`./gradlew assembleDebug -PtestHooks`, emulator only) accept a
+sample-weather scenario for checking each frog look:
 `adb shell am start -n dev.corbyoliver.weather/.MainActivity --es scenario CLEAR_NIGHT`
-(RAIN, WINDY, COLD_SNAP, CLEAR_NIGHT, CLEAR_DAY, CLOUDY).
+(RAIN, WINDY, COLD_SNAP, CLEAR_NIGHT, CLEAR_DAY, CLOUDY), and
+`--es pinWidget temp|alert|rain` to add a widget. The phone's APK is built
+without `-PtestHooks`, so other apps cannot make it show invented weather.
 
 ## Credits
 

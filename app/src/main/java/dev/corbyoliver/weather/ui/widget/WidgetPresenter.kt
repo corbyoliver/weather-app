@@ -66,7 +66,9 @@ fun presentWidgets(snap: WeatherSnapshot, now: Instant, zone: ZoneId = HomeLocat
         alerts.note != null ->
             if (alerts.note.startsWith(ALERTS_UNAVAILABLE)) AlertWidgetUi(false, ALERTS_UNAVAILABLE, alerts.note.substringAfter("· ", ""))
             else AlertWidgetUi(false, alerts.note, "") // "Checking alerts…"
-        else -> AlertWidgetUi(false, "No active alerts", "NWS · checked ${Format.clock(snap.alerts.checkedAt!!, zone)}")
+        else -> snap.alerts.checkedAt
+            ?.let { AlertWidgetUi(false, "No active alerts", "NWS · checked ${Format.clock(it, zone)}") }
+            ?: AlertWidgetUi(false, ALERTS_UNAVAILABLE, "")
     }
 
     val rainUi = RainWidgetUi(

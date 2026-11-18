@@ -15,7 +15,10 @@ import dev.corbyoliver.weather.data.openmeteo.AIR_QUALITY_FIXTURE
 import dev.corbyoliver.weather.data.openmeteo.FIXTURE_FETCHED_AT
 import dev.corbyoliver.weather.data.openmeteo.FORECAST_FIXTURE
 import dev.corbyoliver.weather.data.openmeteo.OpenMeteoSource
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -304,5 +307,21 @@ class WeatherRepositoryTest {
         r.loadCache()
         assertEquals(61, r.state.value.rain.minutes?.size)
         assertEquals(RefreshResult.SKIPPED, r.refreshRain())
+    }
+
+    @Test fun `loading the cache never waits behind a download`() = runBlocking {
+        cache.entry = cachedEntry(now.minus(Duration.ofHours(2)))
+        val gate = CompletableDeferred<Unit>()
+        source.forecast = { error("not used") }
+        val slow = object : OpenMeteoSource {
+            override suspend fun forecastJson(): String { gate.await(); return FORECAST_FIXTURE }
+            override suspend fun airQualityJson(): String = AIR_QUALITY_FIXTURE
+        }
+        val r = WeatherRepository(slow, cache, nws, alertsCache, pirate, rainCache, clock = { now }, log = { _, _ -> })
+        val download = launch { r.refresh() }
+        withTimeout(2_000) { r.loadCache() } // would hang until the download ends if it shared the lock
+        assertNotNull(r.state.value.forecast)
+        gate.complete(Unit)
+        download.join()
     }
 }

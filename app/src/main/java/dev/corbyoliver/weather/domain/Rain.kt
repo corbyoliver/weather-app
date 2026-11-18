@@ -115,9 +115,9 @@ object RainTiming {
         val end = minutes.last().time.plus(Duration.ofMinutes(1))
 
         if (wet(0)) {
+            // Easing needs a full dry run inside the data; a short dry tail is not enough.
             val stop = minutes.indices.firstOrNull { i ->
-                (i until minOf(i + cfg.dryRunMinutes, minutes.size)).none { wet(it) } &&
-                    (i + cfg.dryRunMinutes <= minutes.size || i > 0)
+                i + cfg.dryRunMinutes <= minutes.size && (i until i + cfg.dryRunMinutes).none { wet(it) }
             }
             if (stop == null) {
                 val ease = firstDryHourStart(hours, end, now, cfg)

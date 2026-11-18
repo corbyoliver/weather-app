@@ -37,9 +37,12 @@ object Format {
     /** "Mon 10:42 AM" */
     fun dayClock(t: Instant, zone: ZoneId): String = dayClockFmt.format(t.atZone(zone))
 
+    /** "10:42 AM" today, "Mon 10:42 AM" on another day. */
+    fun clockOrDay(t: Instant, now: Instant, zone: ZoneId): String =
+        if (t.atZone(zone).toLocalDate() == now.atZone(zone).toLocalDate()) clock(t, zone) else dayClock(t, zone)
+
     /** "Updated 10:42 AM" today, "Updated Mon 10:42 AM" on another day. */
-    fun updated(t: Instant, now: Instant, zone: ZoneId): String =
-        if (t.atZone(zone).toLocalDate() == now.atZone(zone).toLocalDate()) "Updated ${clock(t, zone)}" else "Updated ${dayClock(t, zone)}"
+    fun updated(t: Instant, now: Instant, zone: ZoneId): String = "Updated ${clockOrDay(t, now, zone)}"
 
     fun compass(deg: Int?): String {
         if (deg == null) return ""

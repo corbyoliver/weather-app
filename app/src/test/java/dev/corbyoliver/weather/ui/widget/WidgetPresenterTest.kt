@@ -70,4 +70,9 @@ class WidgetPresenterTest {
         val neverWorked = presentWidgets(WeatherSnapshot(alerts = AlertsSnapshot(lastError = "down")), now).alert
         assertEquals(ALERTS_UNAVAILABLE, neverWorked.title)
     }
+
+    @Test fun `known alerts without a check time never crash the widget`() {
+        val w = presentWidgets(WeatherSnapshot(alerts = AlertsSnapshot(alerts = emptyList(), checkedAt = null)), now).alert
+        assertFalse(w.active)
+    }
 }

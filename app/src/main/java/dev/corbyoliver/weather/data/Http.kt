@@ -47,7 +47,14 @@ suspend fun HttpClient.getText(url: String, source: String, headers: Map<String,
     } catch (e: Exception) {
         throw SourceException(unreachableMessage(source, e), cause = e)
     }
-    val body = response.bodyAsText()
+    // The body can fail too (connection dropped mid-download): same handling.
+    val body = try {
+        response.bodyAsText()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        throw SourceException(unreachableMessage(source, e), cause = e)
+    }
     if (response.status.isSuccess()) return body
     val code = response.status.value
     val reason = runCatching {

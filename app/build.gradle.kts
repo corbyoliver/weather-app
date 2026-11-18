@@ -30,6 +30,10 @@ android {
 
         buildConfigField("String", "PIRATE_WEATHER_API_KEY", quoted(localProp("pirateWeatherApiKey")))
         buildConfigField("String", "NWS_USER_AGENT", quoted(localProp("nwsUserAgent")))
+        // Sample-weather and pin-widget launch extras, for emulator testing only.
+        // Off unless built with -PtestHooks, so the phone's APK cannot be made
+        // to show invented weather by another app.
+        buildConfigField("boolean", "TEST_HOOKS", (project.findProperty("testHooks") != null).toString())
     }
 
     // The personal key from scripts/create-signing-key.sh signs every build,

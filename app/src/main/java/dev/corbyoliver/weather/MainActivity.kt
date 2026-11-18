@@ -29,10 +29,10 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
-        // Debug builds only: `--es scenario RAIN` (etc.) shows sample data for one frog look.
-        val scenario = if (!BuildConfig.DEBUG) null else intent.getStringExtra("scenario")
+        // Test builds only (-PtestHooks): `--es scenario RAIN` (etc.) shows sample data for one frog look.
+        val scenario = if (!BuildConfig.TEST_HOOKS) null else intent.getStringExtra("scenario")
             ?.let { name -> SampleScenario.entries.firstOrNull { it.name == name } }
-        if (BuildConfig.DEBUG) intent.getStringExtra("pinWidget")?.let { requestPinWidget(it) }
+        if (BuildConfig.TEST_HOOKS) intent.getStringExtra("pinWidget")?.let { requestPinWidget(it) }
         val source = if (scenario != null) HomeSource.Sample(scenario)
         else HomeSource.Live((application as WeatherApp).repository)
         setContent {
@@ -46,7 +46,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Debug builds only, for testing: `--es pinWidget temp|alert|rain` asks
+     * Test builds only (-PtestHooks): `--es pinWidget temp|alert|rain` asks
      * the launcher to add that widget (Android shows a confirm dialog).
      */
     private fun requestPinWidget(which: String) {

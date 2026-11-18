@@ -47,6 +47,11 @@ class RainTimingTest {
         assertEquals("Rain eases in ~10 min · returns in ~45 min", say(n))
     }
 
+    @Test fun `a dry tail shorter than the dry run is not easing`() {
+        // Rain for 57 minutes, then 3 dry minutes at the end of the data.
+        assertEquals("Rain for the next hour", say(pirate { if (it < 57) 0.08 else 0.0 }, hours { 90 }))
+    }
+
     @Test fun `raining all hour, easing later from the hourly forecast`() {
         val n = pirate { 0.1 }
         assertEquals("Rain for the next hour · easing around 7 PM", say(n, hours { if (it < 3) 80 else 20 }))
